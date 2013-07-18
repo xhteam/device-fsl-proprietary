@@ -1,6 +1,6 @@
 /*
 ***********************************************************************
-* Copyright 2009-2010 by Freescale Semiconductor, Inc.
+* Copyright 2009-2013 by Freescale Semiconductor, Inc.
 * All modifications are confidential and proprietary information
 * of Freescale Semiconductor, Inc. ALL RIGHTS RESERVED.
 ***********************************************************************
@@ -83,7 +83,8 @@ typedef enum
     AUDIO_FLAC,
     AUDIO_NELLYMOSER,
     AUIDO_SPEEX,
-    AUDIO_REAL /* Real audio types */
+    AUDIO_REAL, /* Real audio types */
+    AUDIO_EC3,
     
 }AudioCodecType;
 

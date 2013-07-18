@@ -16,6 +16,7 @@
  *	2013-02-22         Li Xianzhong      0.2            g2d_copy API is added
  *	2013-03-21         Li Xianzhong      0.4            g2d clear/rotation/flip APIs are supported
  *	2013-04-09         Li Xianzhong      0.5            g2d alpha blending feature is enhanced
+ *	2013-05-17         Li Xianzhong      0.6            support vg core in g2d library
 */
 
 #ifndef __G2D_H__
@@ -37,6 +38,14 @@ enum g2d_format
 //yuv formats
      G2D_NV12                 = 20,
      G2D_I420                 = 21,
+     G2D_YV12                 = 22,
+     G2D_NV21                 = 23,
+     G2D_YUYV                 = 24,
+     G2D_YVYU                 = 25,
+     G2D_UYVY                 = 26,
+     G2D_VYUY                 = 27,
+     G2D_NV16                 = 28,
+     G2D_NV61                 = 29,
 };
 
 enum g2d_blend_func
@@ -66,20 +75,46 @@ enum g2d_rotation
     G2D_FLIP_V                = 5,
 };
 
+enum g2d_cache_mode
+{
+    G2D_CACHE_CLEAN           = 0,
+    G2D_CACHE_FLUSH           = 1,
+    G2D_CACHE_INVALIDATE      = 2,
+};
+
+enum g2d_hardware_type
+{
+    G2D_HARDWARE_2D           = 0,//default type
+    G2D_HARDWARE_VG           = 1,
+};
+
 struct g2d_surface
 {
     enum g2d_format format;
 
-    int planes[3];//physical address for plane
-                  //RGB: only plane[0]is used
-                  //I420SP: plane[0] - Y, plane[1] - UV
-                  //I420: plane[0] - Y, plane[1] - U, plane[2] - V
+    int planes[3];//surface buffer addresses are set in physical planes separately
+                  //RGB:  planes[0] - RGB565/RGBA8888/RGBX8888/BGRA8888/BRGX8888
+                  //NV12: planes[0] - Y, planes[1] - packed UV
+                  //I420: planes[0] - Y, planes[1] - U, planes[2] - V
+                  //YV12: planes[0] - Y, planes[1] - V, planes[2] - U
+                  //NV21: planes[0] - Y, planes[1] - packed VU
+                  //YUYV: planes[0] - packed YUYV
+                  //YVYU: planes[0] - packed YVYU
+                  //UYVY: planes[0] - packed UYVY
+                  //VYUY: planes[0] - packed VYUY
+                  //NV16: planes[0] - Y, planes[1] - packed UV
+                  //NV61: planes[0] - Y, planes[1] - packed VU
+
+    //blit rectangle in surface
     int left;
     int top;
     int right;
     int bottom;
 
-    int stride;
+    int stride;//surface buffer stride
+
+    int width;//surface width
+    int height;//surface height
 
     //alpha blending parameters
     enum g2d_blend_func blendfunc;
@@ -99,13 +134,15 @@ struct g2d_buf
     void *buf_handle;
     void *buf_vaddr;
     int  buf_paddr;
+    int  buf_size;
 };
 
 int g2d_open(void **handle);
 int g2d_close(void *handle);
 
-int g2d_clear(void *handle, struct g2d_surface *area);
+int g2d_make_current(void *handle, enum g2d_hardware_type type);
 
+int g2d_clear(void *handle, struct g2d_surface *area);
 int g2d_blit(void *handle, struct g2d_surface *src, struct g2d_surface *dst);
 int g2d_copy(void *handle, struct g2d_buf *d, struct g2d_buf* s, int size);
 
@@ -113,8 +150,12 @@ int g2d_query_cap(void *handle, enum g2d_cap_mode cap, int *enable);
 int g2d_enable(void *handle, enum g2d_cap_mode cap);
 int g2d_disable(void *handle, enum g2d_cap_mode cap);
 
-struct g2d_buf *g2d_alloc(int size);
+int g2d_cache_op(struct g2d_buf *buf, enum g2d_cache_mode op);
+struct g2d_buf *g2d_alloc(int size, int cacheable);
 int g2d_free(struct g2d_buf *buf);
+
+int g2d_flush(void *handle);
+int g2d_finish(void *handle);
 
 #ifdef __cplusplus
 }
