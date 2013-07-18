@@ -203,10 +203,6 @@ ril_context_t ril_context;
 /* trigger change to this with s_state_cond */
 int s_closed = 0;
 
-static const struct timeval TIMEVAL_0 = {0,0};
-
-static ST_SMS_INDICATION cdma_sms_indication;
-
 #define timespec_cmp(a, b, op)   \
     ((a).tv_sec == (b).tv_sec    \
      ? (a).tv_nsec op(b).tv_nsec \
@@ -504,9 +500,7 @@ processRequest (int request, void *data, size_t datalen, RIL_Token t)
 {
 	int err = RIL_E_REQUEST_NOT_SUPPORTED;
 
-	DBG("onRequest: [%d]:%s",request,requestToString(request));
-
-    if (requestStateFilter(request, t))
+   if (requestStateFilter(request, t))
 		return;
 
 	PRIL_REQUEST pRequest=RIL_DISP_TABLE;
@@ -579,7 +573,7 @@ static void onRequest(int request, void *data, size_t datalen, RIL_Token t)
 {
 	int s_state = sState;
     RILRequest *r;
-    RequestQueue *q = &s_requestQueueDefault;
+    RequestQueue *q;
     int err;
 
     /* In radio state unavailable no requests are to enter the queues */
@@ -661,7 +655,7 @@ void setPreferredMessageStorage()
     if (err < 0)
         goto error;
 
-    if (used1 >= total1)
+    if (used1&&used1 >= total1)
         RIL_onUnsolicitedResponse(RIL_UNSOL_SIM_SMS_STORAGE_FULL,NULL, 0);
 
     goto exit;
@@ -1032,16 +1026,16 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	}
 	else if (strStartsWith(s, "+CMTI:")) 
 	{
+		const struct timespec TIMEVAL_CMGR = { 1, 0 };
 		
 		switch(rilhw->model)
 		{
 			case kRIL_HW_MC2716:
 			case kRIL_HW_MC8630:
 			{
-				DBG("CDMA sms indication arrived\n");
 				char* mem;
 				int index;
-				line = (char*)s;
+				line = strdup(s);
 				at_tok_start(&line);
 
 				err = at_tok_nextstr(&line, &mem);
@@ -1050,25 +1044,30 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 					err = at_tok_nextint(&line,&index);
 					if(!err)
 					{
-						if(!strcmp(mem,"BM"))
-							cdma_sms_indication.sms_mem = 0;
-						else if(!strcmp(mem,"ME"))
-							cdma_sms_indication.sms_mem = 1;
-						else if(!strcmp(mem,"MT"))
-							cdma_sms_indication.sms_mem = 2;
-						else if(!strcmp(mem,"SM"))
-							cdma_sms_indication.sms_mem = 3;
-						else if(!strcmp(mem,"TA"))
-							cdma_sms_indication.sms_mem = 4;
-						else if(!strcmp(mem,"SR"))
-							cdma_sms_indication.sms_mem = 5;
-						
-						cdma_sms_indication.sms_index = index;
-						DBG("sms mem=%s,%d\n",mem,index);
-						
-						enqueueRILEvent(on_new_cdma_sms, &cdma_sms_indication, NULL);
+						PST_SMS_INDICATION smi=malloc(sizeof(ST_SMS_INDICATION));
+						if(smi){
+							if(!strcmp(mem,"BM"))
+								smi->sms_mem = 0;
+							else if(!strcmp(mem,"ME"))
+								smi->sms_mem = 1;
+							else if(!strcmp(mem,"MT"))
+								smi->sms_mem = 2;
+							else if(!strcmp(mem,"SM"))
+								smi->sms_mem = 3;
+							else if(!strcmp(mem,"TA"))
+								smi->sms_mem = 4;
+							else if(!strcmp(mem,"SR"))
+								smi->sms_mem = 5;
+							
+							smi->sms_index = index;
+							DBG("sms mem=%s,%d\n",mem,index);
+							
+							enqueueRILEvent(on_new_cdma_sms, smi, &TIMEVAL_CMGR);
+						}
 					}
 				}
+
+				free(line);
 			}
 			break;
 			default://GSM based hardware
@@ -1095,7 +1094,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 					}       
 					else
 					{
-						enqueueRILEvent(on_new_gsm_sms, (void *)location, NULL);
+						enqueueRILEvent(on_new_gsm_sms, (void *)location, &TIMEVAL_CMGR);
 					}
 				}
 				free(line);
@@ -1107,22 +1106,20 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         
 		
 	}		
-	else if (strStartsWith(s, "^HCMT:")) // cdma directly report
+	else if (strStartsWith(s, "^HCMGR:")||strStartsWith(s, "^HCMT:")) // cdma directly report
 	{
         int ret;
         char* pdu;
         ret = encode_gsm_sms_pdu(s, sms_pdu, &pdu);
         if (ret == 0)
         {
-            ERROR("sms pdu len: %d, text: %s\n", strlen(pdu), pdu);
             /* report cdma message in gsm pdu format */
             RIL_onUnsolicitedResponse (
                 RIL_UNSOL_RESPONSE_NEW_SMS,
                 pdu, strlen(pdu));
         }
 	}
-	else if (strStartsWith(s, "^HCMGR:")||
-			strStartsWith(s, "+CMGR:")) //read return
+	else if (strStartsWith(s, "+CMGR:")) //read return
 	{            
         int ret;
         char* pdu;

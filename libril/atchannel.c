@@ -49,6 +49,9 @@ struct atcontext {
     char ATBuffer[MAX_AT_RESPONSE + 1];
     char *ATBufferCur;
 
+	char* ATBufferEnd;
+		
+
     /*
      * For current pending command, these are protected by commandmutex.
      *
@@ -133,7 +136,7 @@ static int initializeAtContext()
         ac->fd = -1;
         ac->readerCmdFds[0] = -1;
         ac->readerCmdFds[1] = -1;
-        ac->ATBufferCur = ac->ATBuffer;
+        ac->ATBufferCur = ac->ATBufferEnd = ac->ATBuffer;
 		ac->smsEncoding = ENCODING_ASCII;
 		ac->smsPDULength = 0;
 
@@ -319,13 +322,9 @@ static const char * s_smsUnsoliciteds[] = {
     "+CMT:",
     "+CDS:",
     "+CBM:",
-    "+CMTI:",
     "+CDSI:",
-    "^SMMEMFULL:",
     "^HCMT:",
     "^HCDS:",
-    "^HCMGSS:",
-    "^HCMGSF:",
     "^HCMGR:",
     "+CMGR:",
     "+CMGL:",
@@ -340,13 +339,6 @@ static int isSMSUnsolicited(const char *line)
             return 1;
         }
     }
-	if(ril_config(sms_mem)!=RIL_SMS_MEM_SM)
-	{
-        if (strStartsWith(line, "+CMTI:")) {
-            return 1;		
-        }
-	}
-
     return 0;
 }
 
@@ -451,65 +443,32 @@ static inline void debug_data(const char *function, int size,
 	char digits[2048] = {0};
 	int i, j;	
 	unsigned char *buf = (unsigned char*)data;
-	ptr = &digits[0];
-	ptr+=sprintf(ptr,"%s ",function);
+	if(function)
+		DBG("%s",function);
 	
 	for (i=0; i<size; i+=16) 
 	{
-	  #if 0
-	  for (j=0; j<16; j++) 
+		ptr = &digits[0];
+		for (j=0; j<16; j++) 
 		if (i+j < size)
 		 ptr+=sprintf(ptr,"%02x ",buf[i+j]);
 		else
 		 ptr+=sprintf(ptr,"%s","   ");
 
 	  ptr+=sprintf(ptr,"%s","  ");
-	  #endif	
 	  for (j=0; j<16; j++) 
 		if (i+j < size)			
 			ptr+=sprintf(ptr,"%c",isprint(buf[i+j]) ? buf[i+j] : '.');
 	  *ptr='\0';
+	  DBG("%s\n",digits);
 	}
-	*ptr='\0';
-	DBG("%s\n",digits);
-}
-static inline void debug_sms(const char *function, int size,
-					 const unsigned char *data)
-{
-#define isprint(c)	(c>='!'&&c<='~')
-	//((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
-		char* ptr;
-		char digits[2048] = {0};
-		int i, j;	
-		unsigned char *buf = (unsigned char*)data;
-		DBG("%s - length = %d\n",
-				   function, size);
-	
-		
-		for (i=0; i<size; i+=16) 
-		{
-		  ptr = &digits[0];
-		  ptr+=sprintf(ptr,"%06x: ",i);
-		  for (j=0; j<16; j++) 
-			if (i+j < size)
-			 ptr+=sprintf(ptr,"%02x ",buf[i+j]);
-			else
-			 ptr+=sprintf(ptr,"%s","   ");
-	
-		  ptr+=sprintf(ptr,"%s","  ");
-			
-		  for (j=0; j<16; j++) 
-			if (i+j < size) 		
-				ptr+=sprintf(ptr,"%c",isprint(buf[i+j]) ? buf[i+j] : '.');
-		  *ptr='\0';
-		  DBG("%s\n",digits);
-		}
+
 }
 
 
 //Thanks for Ellie J.C on helping to write a graceful read line function.
 //Now using higher open source at channel version 
-#if 1
+#if 0
 
 /**
  * Returns a pointer to the end of the next line,
@@ -714,7 +673,7 @@ static const char *readline()
         while (count < 0 && errno == EINTR);
 
         if (count > 0) {
-            AT_DUMP("<< ", p_read, count);
+			debug_data("AT<<",count,(unsigned char*)p_read);
 
             p_read[count] = '\0';
 
@@ -758,9 +717,7 @@ static const char *readline()
         break;
     }
 
-//    LOGI("AT(%d)< %s", ac->fd, ret);
-	debug_data("AT< ",strlen(ret),(unsigned char*)ret);
-	AT_DUMP("<< ",ret,strlen(ret));
+	debug_data("new AT LINE<",strlen(ret),(unsigned char*)ret);
 
     return ret;
 }
@@ -796,24 +753,24 @@ static char * findNextEOL(char *cur,char *end)
 	return NULL;
 }
 
-static char *tryALine()
+static char *tryALine(struct atcontext* ac)
 {
 	size_t len;
 	char *p_eol = NULL;
 	// skip over leading newlines  0x0d 0x0a		
-	while((s_ATBufferEnd>=(s_ATBufferCur+2))&&*s_ATBufferCur == '\r' && *(s_ATBufferCur+1) == '\n')
-	s_ATBufferCur+=2;
-	if(s_ATBufferEnd>=(s_ATBufferCur+2))
+	while((ac->ATBufferEnd>=(ac->ATBufferCur+2))&&*ac->ATBufferCur == '\r' && *(ac->ATBufferCur+1) == '\n')
+	ac->ATBufferCur+=2;
+	if(ac->ATBufferEnd>=(ac->ATBufferCur+2))
 	{
-		p_eol=findNextEOL(s_ATBufferCur,s_ATBufferEnd);
+		p_eol=findNextEOL(ac->ATBufferCur,ac->ATBufferEnd);
 		if (p_eol == NULL) 
 		{
 			/* a partial line. move it up and prepare to read more */				
-			len = s_ATBufferEnd-s_ATBufferCur;
+			len = ac->ATBufferEnd-ac->ATBufferCur;
 
-			memmove(s_ATBuffer, s_ATBufferCur, len);
-			s_ATBufferEnd = s_ATBuffer + len;
-			s_ATBufferCur = s_ATBuffer;
+			memmove(ac->ATBuffer, ac->ATBufferCur, len);
+			ac->ATBufferEnd = ac->ATBuffer + len;
+			ac->ATBufferCur = ac->ATBuffer;
 		}
 	}
 	return p_eol;
@@ -832,32 +789,34 @@ static char *tryALine()
 
 static const char *readline()
 {
+    struct atcontext *ac = getAtContext();
 	ssize_t count;
 	char *p_eol = NULL;
 	char *ret;
 
-	p_eol=tryALine();
+	p_eol=tryALine(ac);
 
 	while (p_eol == NULL) 
 	{
-		if (0 == MAX_AT_RESPONSE - (s_ATBufferEnd - s_ATBuffer)) 
+		if (0 == MAX_AT_RESPONSE - (ac->ATBufferEnd - ac->ATBuffer)) 
 		{
 			ERROR("ERROR: Input line exceeded buffer\n");
 			/* ditch buffer and start over again */
-			s_ATBufferCur = s_ATBufferEnd = s_ATBuffer;
+			ac->ATBufferCur = ac->ATBufferEnd = ac->ATBuffer;
 		}
 
 		do {
-			count = read(s_fd, s_ATBufferEnd,
-			MAX_AT_RESPONSE - (s_ATBufferEnd - s_ATBuffer));
+			count = read(ac->fd, ac->ATBufferEnd,
+			MAX_AT_RESPONSE - (ac->ATBufferEnd - ac->ATBuffer));
 		} while (count < 0 && errno == EINTR);
 
 		if (count > 0) 
 		{
-			//debug_data("AT RAW",count,(unsigned char*)s_ATBufferEnd);
+			//debug_data("AT RAW",count,(unsigned char*)ATBufferEnd);
+			debug_data("AT<<",count,(unsigned char*)ac->ATBufferEnd);
 
-			s_ATBufferEnd += count;
-			p_eol=tryALine();
+			ac->ATBufferEnd += count;
+			p_eol=tryALine(ac);
 		} 
 		else
 		{
@@ -874,15 +833,15 @@ static const char *readline()
 		}
 	}
 
-	ret = s_ATBufferCur;
-	s_ATBufferCur = p_eol; 
-	if(s_ATBufferCur==s_ATBufferEnd)
+	ret = ac->ATBufferCur;
+	ac->ATBufferCur = p_eol; 
+	if(ac->ATBufferCur==ac->ATBufferEnd)
 	{
-		s_ATBufferCur = s_ATBufferEnd = s_ATBuffer;
+		ac->ATBufferCur = ac->ATBufferEnd = ac->ATBuffer;
 	}
 
 	//DBG("AT< %s\n", ret);
-	debug_data("AT< ",strlen(ret),(unsigned char*)ret);
+	debug_data("AT<",strlen(ret),(unsigned char*)ret);
 
 	return ret;
 }
@@ -1033,7 +992,7 @@ static int writeCtrlZ(const char *s)
     }
 
 	DBG("sms length %d,encoding %d",len,ac->smsEncoding);
-	debug_sms("AT (SMS)>",len,(unsigned char*)s);
+	debug_data("AT (SMS)>",len,(unsigned char*)s);
 		
 
 

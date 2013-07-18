@@ -90,38 +90,6 @@ static void dump_array(char* prefix,unsigned char* a,int length)
 
 }
 
-static inline void debug_data(const char *function, int size,
-					 const unsigned char *data)
-{
-#define isprint(c)	(c>='!'&&c<='~')
-//((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
-	char* ptr;
-	char digits[2048] = {0};
-	int i, j;	
-	unsigned char *buf = (unsigned char*)data;
-	DBG("%s - length = %d\n",
-			   function, size);
-
-	
-	for (i=0; i<size; i+=16) 
-	{
-	  ptr = &digits[0];
-	  ptr+=sprintf(ptr,"%06x: ",i);
-	  for (j=0; j<16; j++) 
-		if (i+j < size)
-		 ptr+=sprintf(ptr,"%02x ",buf[i+j]);
-		else
-		 ptr+=sprintf(ptr,"%s","   ");
-
-	  ptr+=sprintf(ptr,"%s","  ");
-		
-	  for (j=0; j<16; j++) 
-		if (i+j < size)			
-			ptr+=sprintf(ptr,"%c",isprint(buf[i+j]) ? buf[i+j] : '.');
-	  *ptr='\0';
-	  DBG("%s\n",digits);
-	}
-}
 
 
 
@@ -697,52 +665,38 @@ static char* sms_mem_mapping_name[]=
 };
 void on_new_cdma_sms(void *param)
 {
-	ATResponse *atresponse = NULL;
-	PST_SMS_INDICATION indication = (PST_SMS_INDICATION)param;
-	if(indication->sms_mem<SMS_MEM_MAX)
+	PST_SMS_INDICATION smi = (PST_SMS_INDICATION)param;
+	if(smi->sms_mem<SMS_MEM_MAX)
 	{
-		int err,skip,used;
 		char* command;
-		ATLine *p_cur;
-		char* sms_header;
-		unsigned char* sms_message;
-		//read sms from mem
-		asprintf(&command,"AT+CPMS=\"%s\",\"%s\",\"%s\"",
-		sms_mem_mapping_name[indication->sms_mem],
-		sms_mem_mapping_name[indication->sms_mem],		
-		sms_mem_mapping_name[indication->sms_mem]);		
-		err = at_send_command_singleline(command,"+CPMS:",&atresponse);
-		free(command);
-		free(atresponse);
-
 		//should I change sms read status?
 		//this will leave HCMGR as unsolicited message to ril core process.
-		asprintf(&command,"AT^HCMGR=%d,%d",indication->sms_index,1);		
+		asprintf(&command,"AT^HCMGR=%d",smi->sms_index);		
+		at_send_command(command,NULL);
+		free(command);
+
+		asprintf(&command,"AT+CMGD=%d",smi->sms_index);		
 		at_send_command(command,NULL);
 		free(command);
 		
+		
 	}
+	free(smi);
 
 }
 
 void on_new_gsm_sms(void *param)
 {
 	int location = (int)param;    
-	const struct timespec TIMEVAL_SMSPOLL = { 1, 0 };
 	char *cmd;   
-	//if(ril_status(screen_state)) 
-	{        
-		asprintf(&cmd, "AT+CMGR=%d,0", location);      //change sms  read status 
-		/* request the sms in a specific location */       
-		at_send_command(cmd, NULL);  
-		free(cmd);        
-		/* remove the sms from specific location XXX temp fix*/
-		asprintf(&cmd, "AT+CMGD=%d,0", location);   
-		at_send_command(cmd, NULL);    
-		free(cmd);    
-	} 
-	//else  
-	//	enqueueRILEvent (on_new_gsm_sms, param, &TIMEVAL_SMSPOLL);  
+	asprintf(&cmd, "AT+CMGR=%d,0", location);      //change sms  read status 
+	/* request the sms in a specific location */       
+	at_send_command(cmd, NULL);  
+	free(cmd);        
+	/* remove the sms from specific location XXX temp fix*/
+	asprintf(&cmd, "AT+CMGD=%d,0", location);   
+	at_send_command(cmd, NULL);    
+	free(cmd);    
 }
 
 

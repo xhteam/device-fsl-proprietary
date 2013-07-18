@@ -47,6 +47,8 @@ void requestGSMSMSBroadcastActivation(void *data, size_t datalen, RIL_Token t);
 void requestCDMASendSMS(void *data, size_t datalen, RIL_Token t);
 void requestCDMASMSAcknowledge(void *data, size_t datalen, RIL_Token t);
 void CheckSMSStorage(void);
+void checkMessageStorageReady();
+
 void sms_delete(int index);
 
 //

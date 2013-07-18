@@ -23,7 +23,9 @@ void onSIMReady()
      * Configure preferred message storage
      *  mem1 = SM, mem2 = SM
      */
-    setPreferredMessageStorage();
+     //will be set in checkMessageStorageReady
+//    setPreferredMessageStorage();
+	
 
     at_send_command_singleline("AT+CSMS=1", "+CSMS:", NULL); 
     /*
@@ -44,7 +46,7 @@ void onSIMReady()
 			//store in SIM and report to TE or report to TE directly
 			//status report to TE?
 			//at_send_command("AT+CNMI=1,1,1,0", NULL); 
-			at_send_command("AT+CNMI=1,2,0,2,0", NULL); 
+			at_send_command("AT+CNMI=1,1,0,2,0", NULL); 
 			break;
 		case kRIL_HW_AD3812:
 			if(ril_config(sms_mem)==RIL_SMS_MEM_SM)
@@ -56,7 +58,7 @@ void onSIMReady()
 			at_send_command("AT+CNMI=2,1,2,2,0", NULL); 
 			break;					
     }
-	CheckSMSStorage();
+	checkMessageStorageReady();
 
 }
 

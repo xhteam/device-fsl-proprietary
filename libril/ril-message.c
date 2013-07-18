@@ -585,6 +585,36 @@ void FindUnreadSms(void* param)
 	at_send_command("AT+CMGL=0",NULL);//unsolicited sms message will be sent to handler
 	
 }
+
+void checkMessageStorageReady(void *p)
+{
+#define MESSAGE_STORAGE_READY_TIMER 3
+
+    int err;	
+    ATResponse *atresponse = NULL;
+    struct timespec trigger_time;
+    (void) p;
+
+    err = at_send_command_singleline("AT+CPMS?","+CPMS:", &atresponse);    
+    if (err != 0 || atresponse->success == 0) goto error;
+	
+    INFO("Message storage is ready");
+	setPreferredMessageStorage();
+	CheckSMSStorage();
+	at_response_free(atresponse);
+    return;
+error:
+	at_response_free(atresponse);
+    ERROR("%s() Message storage is not ready"
+         "A new attempt will be done in %d seconds",
+         __func__, MESSAGE_STORAGE_READY_TIMER);
+
+    trigger_time.tv_sec = MESSAGE_STORAGE_READY_TIMER;
+    trigger_time.tv_nsec = 0;
+
+    enqueueRILEvent(checkMessageStorageReady, NULL, &trigger_time);
+}
+
 void CheckSMSStorage(void)
 {
 	const struct timespec TIMEVAL_SMS = { 1, 0 };
