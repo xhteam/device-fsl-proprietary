@@ -12,7 +12,9 @@ void requestGetIMSI(void *data, size_t datalen, RIL_Token t)
     ATResponse *atresponse = NULL;
     int err;
 
-	if((kRIL_HW_M305== rilhw->model)||(kRIL_HW_WM630== rilhw->model))
+	if((kRIL_HW_M305== rilhw->model)||
+		(kRIL_HW_WM630== rilhw->model)||
+		(kRIL_HW_CWM930== rilhw->model))
 	{
 		err = at_send_command_singleline("AT+CIMI","+CIMI:", &atresponse);
 

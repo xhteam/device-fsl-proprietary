@@ -689,12 +689,12 @@ void on_new_gsm_sms(void *param)
 {
 	int location = (int)param;    
 	char *cmd;   
-	asprintf(&cmd, "AT+CMGR=%d,0", location);      //change sms  read status 
+	asprintf(&cmd, "AT+CMGR=%d", location);      //change sms  read status 
 	/* request the sms in a specific location */       
 	at_send_command(cmd, NULL);  
 	free(cmd);        
 	/* remove the sms from specific location XXX temp fix*/
-	asprintf(&cmd, "AT+CMGD=%d,0", location);   
+	asprintf(&cmd, "AT+CMGD=%d", location);   
 	at_send_command(cmd, NULL);    
 	free(cmd);    
 }

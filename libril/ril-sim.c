@@ -9,7 +9,6 @@
 #endif
 
 
-#define MESSAGE_STORAGE_READY_TIMER 3
 
 static const struct timespec TIMEVAL_SIMPOLL = { 1, 0 };
 

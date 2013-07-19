@@ -135,6 +135,15 @@ static ST_RIL_HARDWARE hw_mapping[] =
 		.service_port	= "/dev/ttyUSB1",
 		.modem_port 	= "/dev/ttyUSB0",
 		.voice_port		= "/dev/ttyUSB2",
+	},
+	{
+		.model_name 	= "CWM930",
+		.model			= kRIL_HW_CWM930,
+		.prefer_net 	= kPREFER_NETWORK_TYPE_WCDMA,
+		.vid			= 0x257a,
+		.pid			= 0x2606,
+		.service_port	= "/dev/ttyUSB2",
+		.modem_port 	= "/dev/ttyUSB0",
 	},	
 	{
 		.model_name		= "unknown",
