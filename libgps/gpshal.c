@@ -1,4 +1,19 @@
-//code comes from qemu gps code
+/*
+* Copyright (C) 2011 The Android Open Source Project
+* Copyright (C) 2011-2013 Questers Technology, Inc.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 #include <errno.h>
 #include <pthread.h>
 #include <termios.h>
@@ -7,14 +22,11 @@
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
-
-#define LOG_NDEBUG 1
 #define  LOG_TAG  "gps"
 #include <cutils/log.h>
 #include <cutils/sockets.h>
 #include <cutils/array.h>
 #include <cutils/properties.h>
-
 #include <hardware/gps.h>
 
 #define  GPS_DEBUG  0
@@ -23,8 +35,8 @@
 #  define  D(...)   ALOGD(__VA_ARGS__)
 #  define  V(...)   ALOGV(__VA_ARGS__)
 #else
-#  define  D(...)   ((void)0)
-#  define  V(...)   ((void)0)
+#  define  D(...)   
+#  define  V(...)   
 #endif
 
 #define PROP_GPS_PORT "ro.gps.port"
@@ -84,11 +96,13 @@ nmea_tokenizer_init( NmeaTokenizer*  t, const char*  p, const char*  end )
         if (q == NULL)
             q = end;
 
-         if (count < MAX_NMEA_TOKENS) {
-             t->tokens[count].p   = p;
-             t->tokens[count].end = q;
-             count += 1;
-         }
+        if (q > p) {
+            if (count < MAX_NMEA_TOKENS) {
+                t->tokens[count].p   = p;
+                t->tokens[count].end = q;
+                count += 1;
+            }
+        }
         if (q < end)
             q += 1;
 
@@ -120,6 +134,10 @@ str2int( const char*  p, const char*  end )
     int   result = 0;
     int   len    = end - p;
 
+    if (len == 0) {
+      return -1;
+    }
+
     for ( ; len > 0; len--, p++ )
     {
         int  c;
@@ -143,8 +161,12 @@ static double
 str2float( const char*  p, const char*  end )
 {
     int   result = 0;
-    int   len    = end - p;
-    char  temp[16];
+    int   len    = end - p + 1;
+    char  temp[32];
+
+    if (len == 0) {
+      return -1.0;
+    }
 
     if (len >= (int)sizeof(temp))
         return 0.;
@@ -721,7 +743,7 @@ nmea_reader_parse( NmeaReader*  r )
     }
     if (r->fix.flags != 0) {
 #if GPS_DEBUG
-        char   temp[256];
+        char   temp[1024];
         char*  p   = temp;
         char*  end = p + sizeof(temp);
         struct tm   utc;
@@ -972,17 +994,12 @@ static int write_attr_file(const char* path,int val)
 }
 
 static void gps_state_power(int on){
-#define GPS_ATTR_POWER  "/sys/class/gpio/gpio35/value"
-#define GPS_ATTR_RESET  "/sys/class/gpio/gpio135/value"
+#define GPS_ATTR_POWER  "/sys/class/gpio/gpio142/value"
     ALOGD("gps state -> power %s ",(on>0)?"on":"off");
     if(on){
         write_attr_file(GPS_ATTR_POWER,1);
-
-        
-        write_attr_file(GPS_ATTR_RESET,0);          
         //wait chip to finish reset
         usleep(500*1000);
-        write_attr_file(GPS_ATTR_RESET,1);     
     }else{
         write_attr_file(GPS_ATTR_POWER,0);    
     }
@@ -1242,67 +1259,70 @@ static void gps_state_deinit(GpsState*  state) {
 /*****************************************************************/
 
 static int gps_init(GpsCallbacks* callbacks) {
-	GpsState* state = _gps_state;
+    GpsState*  s = _gps_state;
 
 	ALOGD("%s", __func__);
 
-	state->callbacks = *callbacks;
+	s->callbacks = *callbacks;
 
-	if (!state->init)
-		gps_state_init(state);
+	if (!s->init)
+		gps_state_init(s);
 
-	return 0;
+    if (s->fd < 0)
+        return -1;
+
+    return 0;
 }
 
 static void gps_cleanup() {
-	GpsState* state = _gps_state;
+    GpsState*  s = _gps_state;
 
 	ALOGD("%s", __func__);
 
-	if (state->init)
-		gps_state_deinit(state);
+	if (s->init)
+		gps_state_deinit(s);
 }
 
 static int gps_start() {
-	GpsState* state = _gps_state;
+    GpsState*  s = _gps_state;
 
-	if (!state->init) {
+	if (!s->init) {
 		D("%s: called with uninitialized state !!", __FUNCTION__);
-		gps_state_init(state);
+		gps_state_init(s);
 	}
 
 	ALOGD("%s", __func__);
 
-	gps_state_thread_ctl(state, CMD_START);
+	gps_state_thread_ctl(s, CMD_START);
 	return 0;
 }
 
 static int gps_stop() {
-	GpsState* state = _gps_state;
+    GpsState*  s = _gps_state;
 
-	if (!state->init) {
+	if (!s->init) {
 		D("%s: called with uninitialized state !!", __FUNCTION__);
 		return -1;
 	}
 
 	ALOGD("%s", __func__);
 
-	gps_state_thread_ctl(state, CMD_STOP);
+	gps_state_thread_ctl(s, CMD_STOP);
 	return 0;
 }
 
-static int gps_inject_time(GpsUtcTime time, int64_t timeReference, int uncertainty) {
-	ALOGD("%s", __func__);
+static int 
+gps_inject_time(GpsUtcTime time, int64_t timeReference, int uncertainty) {
 	return 0;
 }
 
-static int gps_inject_location(double latitude, double longitude, float accuracy) {
-	ALOGD("%s", __func__);
+static int 
+gps_inject_location(double latitude, double longitude, float accuracy) {
 	return 0;
 }
 
-static void gps_delete_aiding_data(GpsAidingData flags) {
-	ALOGD("%s", __func__);
+static void 
+gps_delete_aiding_data(GpsAidingData flags) {
 }
 
 static int gps_set_position_mode(GpsPositionMode mode,
@@ -1326,11 +1346,12 @@ static int gps_set_position_mode(GpsPositionMode mode,
 	return 0;
 }
 
-static const void* gps_get_extension(const char* name) {
+static const void* 
+gps_get_extension(const char* name) {
 	return NULL;
 }
 
-static const GpsInterface  hardwareGpsInterface = {
+static const GpsInterface  NmeaUartGpsInterface = {
     sizeof(GpsInterface),
     gps_init,
     gps_start,
@@ -1343,16 +1364,11 @@ static const GpsInterface  hardwareGpsInterface = {
     gps_get_extension,
 };
 
-const GpsInterface* gps_get_hardware_interface() {
-    return &hardwareGpsInterface;
+static const GpsInterface* gps_get_hardware_interface(struct gps_device_t* dev) {
+    return &NmeaUartGpsInterface;
 }
 
 
-const GpsInterface* gps__get_gps_interface(struct gps_device_t* dev)
-{
-    D("gps_get_hardware_interface");
-    return gps_get_hardware_interface();
-}
 
 static int open_gps(const struct hw_module_t* module, char const* name,
         struct hw_device_t** device)
@@ -1363,7 +1379,7 @@ static int open_gps(const struct hw_module_t* module, char const* name,
     dev->common.tag = HARDWARE_DEVICE_TAG;
     dev->common.version = 0;
     dev->common.module = (struct hw_module_t*)module;
-    dev->get_gps_interface = gps__get_gps_interface;
+    dev->get_gps_interface = gps_get_hardware_interface;
 
     *device = (struct hw_device_t*)dev;
     return 0;
@@ -1373,7 +1389,7 @@ static struct hw_module_methods_t gps_module_methods = {
     .open = open_gps
 };
 
-const struct hw_module_t HAL_MODULE_INFO_SYM = {
+struct hw_module_t HAL_MODULE_INFO_SYM = {
     .tag = HARDWARE_MODULE_TAG,
     .version_major = 1,
     .version_minor = 0,
