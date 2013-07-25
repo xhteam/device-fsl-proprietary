@@ -144,6 +144,15 @@ static ST_RIL_HARDWARE hw_mapping[] =
 		.pid			= 0x2606,
 		.service_port	= "/dev/ttyUSB2",
 		.modem_port 	= "/dev/ttyUSB0",
+	},
+	{
+		.model_name 	= "AnyData",
+		.model			= kRIL_HW_ANYDATA,
+		.prefer_net 	= kPREFER_NETWORK_TYPE_CDMA_EVDV,
+		.vid			= 0x16d5,
+		.pid			= 0x6502,
+		.service_port	= "/dev/ttyUSB2",
+		.modem_port 	= "/dev/ttyUSB0",
 	},	
 	{
 		.model_name		= "unknown",
