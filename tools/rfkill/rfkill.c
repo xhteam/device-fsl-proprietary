@@ -68,8 +68,7 @@ static void rfkill_event(void)
 
 static const char *get_name(__u32 idx)
 {
-	static char name[128];
-	ssize_t len;
+	static char name[128] = {};
 	char *pos, filename[64];
 	int fd;
 
@@ -81,7 +80,7 @@ static const char *get_name(__u32 idx)
 		return NULL;
 
 	memset(name, 0, sizeof(name));
-	len = read(fd, name, sizeof(name) - 1);
+	read(fd, name, sizeof(name) - 1);
 
 	pos = strchr(name, '\n');
 	if (pos)
@@ -111,6 +110,8 @@ static const char *type2string(enum rfkill_type type)
 		return "GPS";
 	case RFKILL_TYPE_FM:
 		return "FM";
+	case RFKILL_TYPE_NFC:
+		return "NFC";
 	case NUM_RFKILL_TYPES:
 		return NULL;
 	}
@@ -133,6 +134,7 @@ static const struct rfkill_type_str rfkill_type_strings[] = {
 	{	.type = RFKILL_TYPE_WWAN,		.name = "wwan"	},
 	{	.type = RFKILL_TYPE_GPS,		.name = "gps"	},
 	{	.type = RFKILL_TYPE_FM,			.name = "fm"	},
+	{	.type = RFKILL_TYPE_NFC,		.name = "nfc"	},
 	{	.name = NULL }
 };
 
@@ -288,7 +290,7 @@ static int rfkill_block(__u8 block, const char *param)
 }
 
 static const char *argv0;
-const char rfkill_version[]="001";
+const char rfkill_version[]="0.5";
 static void usage(void)
 {
 	const struct rfkill_type_str *p;
