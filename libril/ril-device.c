@@ -12,10 +12,17 @@ void requestGetIMSI(void *data, size_t datalen, RIL_Token t)
     ATResponse *atresponse = NULL;
     int err;
 
-	if((kRIL_HW_M305== rilhw->model)||
-		(kRIL_HW_WM630== rilhw->model)||
-		(kRIL_HW_CWM930== rilhw->model))
-	{
+	if((kRIL_HW_MC2716== rilhw->model))	{
+		err = at_send_command_numeric("AT+CIMI", &atresponse);
+
+		if (err < 0 || atresponse->success == 0) {
+		    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+		} else {
+		    RIL_onRequestComplete(t, RIL_E_SUCCESS,
+		                          atresponse->p_intermediates->line,
+		                          sizeof(char *));
+		}
+	}else {
 		err = at_send_command_singleline("AT+CIMI","+CIMI:", &atresponse);
 
 		if (err < 0 || atresponse->success == 0) {
@@ -39,18 +46,7 @@ void requestGetIMSI(void *data, size_t datalen, RIL_Token t)
 		}
 		
 	}
-	else
-	{
-		err = at_send_command_numeric("AT+CIMI", &atresponse);
-
-		if (err < 0 || atresponse->success == 0) {
-		    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-		} else {
-		    RIL_onRequestComplete(t, RIL_E_SUCCESS,
-		                          atresponse->p_intermediates->line,
-		                          sizeof(char *));
-		}
-	}
+	
     at_response_free(atresponse);
 	return;
 error:
