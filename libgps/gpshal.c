@@ -41,8 +41,11 @@
 
 #define PROP_GPS_PORT "ro.gps.port"
 #define PROP_GPS_RATE "ro.gps.rate"
+#define PROP_GPS_POWER "ro.gps.power"
 #define DEFAULT_GPS_PORT "/dev/ttyS1"
 #define DEFAULT_GPS_RATE "9600"
+#define DEFAULT_GPS_POWER  "/sys/class/gpio/gpio142/value"
+
 
 
 /*****************************************************************/
@@ -993,15 +996,16 @@ static int write_attr_file(const char* path,int val)
 
 }
 
-static void gps_state_power(int on){
-#define GPS_ATTR_POWER  "/sys/class/gpio/gpio142/value"
+static void gps_state_power(int on){	
+	char value[PROPERTY_VALUE_MAX];
+	property_get(PROP_GPS_POWER, value, DEFAULT_GPS_POWER);
     ALOGD("gps state -> power %s ",(on>0)?"on":"off");
     if(on){
-        write_attr_file(GPS_ATTR_POWER,1);
+        write_attr_file(value,1);
         //wait chip to finish reset
         usleep(500*1000);
     }else{
-        write_attr_file(GPS_ATTR_POWER,0);    
+        write_attr_file(value,0);
     }
 }
 /* this is the main thread, it waits for commands from gps_state_thread_ctl() and,
