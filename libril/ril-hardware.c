@@ -17,6 +17,7 @@
 #include "ril-handler.h"
 #include "atchannel.h"
 
+static int ad3812_hook(struct ril_hardware* rilhw,int event);
 #define ANDROID_WAKE_LOCK_NAME "ril_hardware"
 
 enum {
@@ -55,6 +56,7 @@ static ST_RIL_HARDWARE hw_mapping[] =
 		.voice_rw_period= "20",
 		.no_pinonoff	= 1,
 		.no_suspend		= 1,
+		.hook			= ad3812_hook,
 	},
 	{
 		.model_name 	= "MC2716",
@@ -463,8 +465,11 @@ finished:
 			hw->no_pinonoff=0;
 			writeStringToFile("/sys/devices/platform/usb_modem/usb_modem","onoff off\n");
 			writeStringToFile("/sys/devices/platform/usb_modem/usb_modem","onoff skip\n");
-			rilhw_power(hw,kRequestStateOn);
+			rilhw_power(hw,kRequestStateReset);
 		}
+
+		if(hw->hook)
+			hw->hook(hw,0);
 		
 	}
 	
@@ -555,7 +560,7 @@ int rilhw_autosuspend(PST_RIL_HARDWARE hardware,int enable){
 		autosuspend_timeout = atoi(property);
 		if(autosuspend_timeout<0||autosuspend_timeout>120)
 			autosuspend_timeout=5;
-		asprintf(&command, "modem_rt:%s %d %x",(enable>0)?"auto":"on",
+		asprintf(&command, "modem_rt:%s %d %lx",(enable>0)?"auto":"on",
 			(enable>0)?autosuspend_timeout:-1,
 			hardware->vid);
 		property_set("ctl.start",command);
@@ -564,6 +569,39 @@ int rilhw_autosuspend(PST_RIL_HARDWARE hardware,int enable){
 	return enable;
 }
 
+int rilhw_power_state(void)
+{
+	int fd = open( "/sys/devices/platform/usb_modem/usb_modem", O_RDONLY );
+	int ret=-1;
+	if( fd >= 0 )
+	{
+		char buf[30];
+		char *p,*q;
+		int rlt = read( fd, buf, sizeof(buf) );
+		if( rlt > 0 ){
+			buf[rlt] = '\0';
+            p = strstr( buf, "modem state \"" );
+            if (p != NULL)
+			{
+				p += strlen("modem state \"");
+				q  = strpbrk( p, " \t\n\"" );
+				if (q != NULL)
+				{
+					*q = 0;
+					if(strcmp(p,"on")==0)
+						ret=kRequestStateOn;
+					else if(strcmp(p,"off")==0)
+						ret=kRequestStateOff;
+					else
+						ret=kRequestStateInvalid;
+				}
+			}
+		}
+		close(fd);
+	}
+	return ret;
+}
+//Ellie add end
 
 static int rilhw_link_change(void)
 {
@@ -760,11 +798,172 @@ bail:
 	return NULL;
 }
 
+#ifdef ANDROID_PROPERTY_WATCH
+struct prop_watch nt_autoswitch_watch;
+
+static void nt_switch(void* arg){
+	char* cmd;
+	asprintf(&cmd, "AT+COPS=,,,%d", (int)arg);
+	at_send_command(cmd,NULL);
+	free(cmd);
+}
+
+static int autoswitch_notifier_call(struct prop_watch * pw, char* name , char* value){	
+	if(!value) return 0;
+	if(!strcmp(value,"2g")){
+		DBG("switch to 2g prefer mode");
+		enqueueRILEvent(nt_switch,(void*)0,NULL);
+	}else if(!strcmp(value,"3g")){
+		DBG("switch to 3g prefer mode");
+		enqueueRILEvent(nt_switch,(void*)2,NULL);
+	}
+	return 1;
+}
+
+#endif
+static int ad3812_hook(struct ril_hardware* rilhw,int event){	
+	#ifdef ANDROID_PROPERTY_WATCH
+	init_prop_watch(&nt_autoswitch_watch,autoswitch_notifier_call,"ril.radio.autoswitch",0);
+	register_prop_watch(&nt_autoswitch_watch);
+	#endif
+	return 0;
+}
+
+#ifdef ANDROID_PROPERTY_WATCH
+#include <cutils/properties.h>
+
+#include <sys/atomics.h>
+
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
+
+
+extern prop_area *__system_property_area__;
+
+typedef struct pwatch pwatch;
+
+struct pwatch
+{
+    const prop_info *pi;
+    unsigned serial;
+};
+
+static pwatch watchlist[1024];
+struct prop_watch* chain=NULL;
+
+
+int init_prop_watch(struct prop_watch* pw,notifier_call __notifier,char* __prop_key,void* __priv){
+	if(!pw||!__prop_key||!__notifier)
+		return -1;
+	pw->notifier = __notifier;
+	pw->priv = __priv;
+	memset(pw->prop_key,0,PROPERTY_KEY_MAX);
+	strcpy(pw->prop_key,__prop_key);
+	pw->next = NULL;
+
+	return 0;
+	
+}
+int register_prop_watch(struct prop_watch* pw){
+	if(!pw)
+		return -1;
+	if(!chain){
+		chain = pw;
+	}else {
+		struct prop_watch* iter=chain;
+		while(NULL!=iter) {
+			if(pw==iter) return 0;
+
+			if(NULL==iter->next)
+				break;
+			iter = iter->next;
+		}
+		iter->next = pw;
+	}
+	return 0;
+}
+
+static void announce(const prop_info *pi)
+{
+    char name[PROP_NAME_MAX];
+    char value[PROP_VALUE_MAX];
+    char *x;
+
+    __system_property_read(pi, name, value);
+
+    for(x = value; *x; x++) {
+        if((*x < 32) || (*x > 127)) *x = '.';
+    }
+
+	#if 0
+    DBG("%10d %s = '%s'\n", (int) time(0), name, value);
+	#endif
+	{
+		struct prop_watch* iter=chain;
+		while(NULL!=iter){
+			if(!strcmp(iter->prop_key,name)){
+			  if(iter->notifier){
+			  	if(iter->notifier(iter,name,value))
+					break;
+			  }
+			}
+			iter = iter->next;
+		}
+			
+	}
+}
+
+static void *props_watch(void* param)
+{
+	prop_area *pa = __system_property_area__;
+	unsigned serial = pa->serial;
+	unsigned count = pa->count;
+	unsigned n;
+
+	if(count >= 1024) return NULL;
+
+	for(n = 0; n < count; n++) {
+		watchlist[n].pi = __system_property_find_nth(n);
+		watchlist[n].serial = watchlist[n].pi->serial;
+	}
+
+	DBG("props_watch is running\n");
+	for(;;) {
+		do {
+			__futex_wait(&pa->serial, serial, 0);
+		} while(pa->serial == serial);
+
+		while(count < pa->count){
+			watchlist[count].pi = __system_property_find_nth(count);
+			watchlist[count].serial = watchlist[n].pi->serial;
+			announce(watchlist[count].pi);
+			count++;
+			if(count == 1024) return NULL;
+		}
+
+		for(n = 0; n < count; n++){
+			unsigned tmp = watchlist[n].pi->serial;
+			if(watchlist[n].serial != tmp) {
+				announce(watchlist[n].pi);
+				watchlist[n].serial = tmp;
+			}
+		}
+	}
+
+	return NULL;
+
+}
+#endif
+
 int rilhw_init(void)
 {
 	static pthread_t s_tid_hw=-1;
 	static struct hardware_monitor_param param;
-
+	
+	#ifdef ANDROID_PROPERTY_WATCH
+	static pthread_t s_tid_props_watch=-1;
+	#endif
+	
 	if(-1==s_tid_hw)
 	{
 		int ret,fd,wd;
@@ -806,6 +1005,20 @@ int rilhw_init(void)
 		}
 		
 	}
+	
+	#ifdef ANDROID_PROPERTY_WATCH
+	if(-1==s_tid_props_watch){		
+		pthread_attr_t attr;	
+		int ret;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+		ret = pthread_create(&s_tid_props_watch, &attr, props_watch, NULL);
+		if (ret < 0) {
+			perror ("pthread_create");
+			return -1;
+		}
+	}
+	#endif
 
     return 0;
 

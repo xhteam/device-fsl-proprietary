@@ -25,7 +25,11 @@ enum
 	kPREFER_NETWORK_TYPE_TD_SCDMA = 3 ,
 	kPREFER_NETWORK_TYPE_DEFAULT = kPREFER_NETWORK_TYPE_WCDMA
 };
-typedef struct
+
+struct ril_hardware;
+
+typedef int (*rilhw_hook)(struct ril_hardware* rilhw,int event);
+typedef struct ril_hardware
 {
 	unsigned int model;
 	const char* model_name;
@@ -42,7 +46,8 @@ typedef struct
 	unsigned int no_pinonoff:1;/*disable pin onoff function*/
 	unsigned int no_suspend:1;/*disable runtime suspend feature*/
 	unsigned int no_ipstack:1;/*prefer to using embedded tcpip stack.if no ipstack,using hosted ip stack*/
-	
+
+	rilhw_hook hook;
 	//internal use
 	void* private;
 	
@@ -58,13 +63,16 @@ void rilhw_found(PST_RIL_HARDWARE *found);
 //0:off
 //1:on 
 //2:reset
+//3:invalid
 enum{
  kRequestStateOff=0,
  kRequestStateOn,
- kRequestStateReset
+ kRequestStateReset,
+ kRequestStateInvalid,  /*Ellie*/
 };
 int rilhw_power(PST_RIL_HARDWARE hardware,int reqstate);
 int rilhw_autosuspend(PST_RIL_HARDWARE hardware,int enable);
+int rilhw_power_state(void);
 
 //wakeup modem 
 int rilhw_wakeup(PST_RIL_HARDWARE hardware,int wake);
@@ -75,6 +83,28 @@ int rilhw_notify_screen_state(int state);
 //wake lock mainly for in call use
 int rilhw_acquire_wakelock();
 int rilhw_release_wakelock();
+
+#ifdef ANDROID_PROPERTY_WATCH
+#include <cutils/properties.h>
+struct prop_watch;
+
+typedef int (*notifier_call)(struct prop_watch *, char* , char*);
+struct prop_watch{
+	struct prop_watch *next;
+
+	
+	notifier_call notifier;
+
+	char prop_key[PROPERTY_KEY_MAX];
+	void *priv;
+};
+
+int init_prop_watch(struct prop_watch* pw,notifier_call __notifier,char* __prop_key,void* __priv);
+int register_prop_watch(struct prop_watch* pw);
+
+
+
+#endif
 
 #endif 
 

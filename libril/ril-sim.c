@@ -59,6 +59,11 @@ void onSIMReady()
     }
 	checkMessageStorageReady();
 
+	//Ellie: if resuming failed and recovered, trigger upper layer to query the state again
+	RIL_onUnsolicitedResponse (
+		RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+		NULL, 0);
+
 }
 
 static void resetSim(void *param)

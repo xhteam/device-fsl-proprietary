@@ -339,6 +339,8 @@ void requestSetPreferredNetworkType(void *data, size_t datalen,
 		}
 		else
 		{
+			//change to using COPS,which is invalidated immediately
+			#if 0
 			switch (rat) 
 			{
 				case 0: case 3: case 4: case 7:
@@ -358,6 +360,26 @@ void requestSetPreferredNetworkType(void *data, size_t datalen,
 				return;
 			}
 			asprintf(&cmd, "AT+ZMDS=%d", arg);
+			#else
+			switch (rat)
+			{
+				case 0: case 3: case 4: case 7:
+					arg = 0;   // atuo
+					asprintf(&cmd, "AT+COPS=%d", arg);
+					DBG("set preferred network is auto");
+					break;
+				case 1: case 5:
+					arg = 0;	// GSM
+					asprintf(&cmd, "AT+COPS=,,,%d", arg);
+					DBG("set preferred network is GSM");
+					break;
+				case 2: case 6: default:
+					arg = 2;	// WCDMA
+					asprintf(&cmd, "AT+COPS=,,,%d", arg);
+					DBG("set preferred network is WCDMA");
+					break;
+			}
+			#endif
 			err = at_send_command(cmd, &atresponse);
 			if (err < 0 || atresponse->success == 0)
 			{
@@ -373,7 +395,7 @@ void requestSetPreferredNetworkType(void *data, size_t datalen,
 	}
 
 error:
-	free(cmd);
+	if(cmd)	free(cmd);
 	at_response_free(atresponse);
     RIL_onRequestComplete(t, errno, NULL, 0);
 }
@@ -1878,6 +1900,7 @@ static void requestGSMGetPreferredNetworkType(void *data, size_t datalen,
     char *line;
     ATResponse *atresponse=NULL;
 
+	/*
 	if(rilhw->model == kRIL_HW_AD3812)
 	{
 	    err = at_send_command_singleline("AT+ZMDS?", "+ZMDS:", &atresponse);
@@ -1909,12 +1932,13 @@ static void requestGSMGetPreferredNetworkType(void *data, size_t datalen,
 	        break;
 	    }
 	}
-	else if(rilhw->model == kRIL_HW_M305)
+	else */
+	if(rilhw->model == kRIL_HW_M305)
 	{
 		//M305 does not support this ,
 		response = 7; //GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL)
 	}
-	else //fall back to MF210?
+	else if(rilhw->model == kRIL_HW_MF210)
 	{
 	    err = at_send_command_singleline("AT+ZSNT?", "+ZSNT:", &atresponse);
 	    if (err < 0 || atresponse->success == 0) {
@@ -1943,6 +1967,43 @@ static void requestGSMGetPreferredNetworkType(void *data, size_t datalen,
 	        response = 2;
 	        break;
 	    }
+	}else {//fallback to AT+COPS?
+
+		err = at_send_command_singleline("AT+COPS?", "+COPS:", &atresponse);
+		if (!err&&atresponse->success)
+		{
+			char *p, *line;
+			int commas=0;
+			int value;
+			/* We need to get the 4th return param */
+			line = atresponse->p_intermediates->line;
+
+			for (p = line ; *p != '\0' ;p++) {
+				if (*p == ',') commas++;
+			}
+
+			if (commas == 3) {
+				err = at_tok_start(&line);			if (err < 0) goto error;
+				err = at_tok_nextint(&line, &value); if (err < 0) goto error;
+				err = at_tok_nextint(&line, &value); if (err < 0) goto error;
+				err = at_tok_nextint(&line, &value); if (err < 0) goto error;
+				err = at_tok_nextint(&line, &value); if (err < 0) goto error;
+				/* Now translate to 'Broken Android Speak' - can't follow the GSM spec */
+				switch(value) {
+					/* GSM/GSM Compact - aka GRPS */
+					case 0:
+					case 1:
+						response = 1;
+						break;
+						/* UTRAN - UMTS or better */
+					case 2:
+					default:
+						response = 3;
+						break;
+				}
+			}else goto error;
+		}else goto error;
+
 	}
     RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(int));
     at_response_free(atresponse);

@@ -29,7 +29,7 @@
 #define MODEM_POWER_PATCH
 #define TIMEOUT_SEARCH_FOR_TTY 5 /* Poll every Xs for the port*/
 #define TIMEOUT_EMRDY 10 /* Module should respond at least within 10s */
-#define TIMEOUT_MODEM_POWER_PATCH 30
+#define TIMEOUT_MODEM_POWER_PATCH 6
 static void requestDebug(void *data, size_t datalen, RIL_Token t);
 
 #define RIL_REQUEST_ENTRY(req,dispatch) {req,dispatch}
@@ -850,7 +850,7 @@ int modem_init(void)
 		{
 			at_send_command("AT^ZVOUSB=1", NULL);			
 		}
-		if(kRIL_HW_AD3812==rilhw->model)
+		else if(kRIL_HW_AD3812==rilhw->model)
 		{		
 			char value[PROPERTY_VALUE_MAX];						
  			memset(value,0,PROPERTY_VALUE_MAX);
@@ -870,8 +870,10 @@ int modem_init(void)
 				at_send_command("AT+ZHWPCM=0", NULL);
 				
 			}
-			
-
+		}
+		else if(kRIL_HW_CWM930==rilhw->model)
+		{		
+			at_send_command("AT+CLVL=3", NULL);
 		}
 	}	
 
@@ -914,7 +916,8 @@ static int initializeCommon(void)
 failed:
 	setRadioState(RADIO_STATE_UNAVAILABLE);
 	//power off ril hardware now
-	rilhw_power(rilhw,kRequestStateReset);
+	//Ellie comments out, just return error and we'll handle it in queueRunner
+	//rilhw_power(rilhw,kRequestStateReset);
 	return ret;
 	
 
@@ -1213,7 +1216,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	
 }
 
-static void signalCloseQueues(void)
+static void signalCloseQueues(char close_flag)
 {
     unsigned int i;
     for (i = 0; i < (sizeof(s_requestQueues) / sizeof(RequestQueue *)); i++) {
@@ -1223,7 +1226,7 @@ static void signalCloseQueues(void)
             ERROR("%s() failed to take queue mutex: %s",
                 __func__, strerror(err));
 
-        q->closed = 1;
+        q->closed = close_flag;
         if ((err = pthread_cond_signal(&q->cond)) != 0)
             ERROR("%s() failed to broadcast queue update: %s",
                 __func__, strerror(err));
@@ -1240,7 +1243,7 @@ static void onATReaderClosed()
     WARN("AT channel closed\n");
 
     setRadioState (RADIO_STATE_UNAVAILABLE);
-    signalCloseQueues();
+    signalCloseQueues(1);
     at_close();
 }
 
@@ -1253,9 +1256,8 @@ static void onATTimeout()
     at_send_escape();
 
     setRadioState(RADIO_STATE_UNAVAILABLE);
-	//restart modem power
-	property_set("ril.modem.power","off");
-    signalCloseQueues();
+
+    signalCloseQueues(2);
 }
 static void onATAccessNotify(const char* at,int wake)
 {
@@ -1308,12 +1310,33 @@ static void *queueRunner(void *param)
     struct timespec timeout;
     struct queueArgs *queueArgs = (struct queueArgs *) param;
     struct RequestQueue *q = NULL;
-	int retrycount=0;
+	int failcount=0,fatalerr=0;
 
     DBG("%s() starting!", __func__);
 
     for (;;) {
-find_rilhw:
+runer_loop:
+		if(rilhw_power_state()==kRequestStateOff)
+			fatalerr=1;
+		if(failcount>0||fatalerr)
+		{
+			pdp_uninit();	
+		}
+#ifdef MODEM_POWER_PATCH
+		if(failcount>TIMEOUT_MODEM_POWER_PATCH||fatalerr)
+		{
+			rilhw_power(0,kRequestStateReset);
+			failcount=fatalerr=0;
+			DBG("modem power once again");
+			sleep(TIMEOUT_SEARCH_FOR_TTY);
+		}
+#endif
+		if(failcount>0)
+		{
+			WARN("error encountered,retry after %ds\n",TIMEOUT_SEARCH_FOR_TTY);		
+			sleep(TIMEOUT_SEARCH_FOR_TTY);
+		}
+
         fd = -1;      		
 		rilhw_found(&rilhw);		
 		if(rilhw||queueArgs->port > 0)
@@ -1364,33 +1387,10 @@ find_rilhw:
             }
 
 			if (fd < 0) {				
-				int delays=TIMEOUT_SEARCH_FOR_TTY;
-				#ifdef MODEM_POWER_PATCH
-				char prop_value[PROPERTY_VALUE_MAX];						
-				retrycount++;
-				memset(prop_value,0,PROPERTY_VALUE_MAX);
-				property_get("ril.modem.power",prop_value,"on");
-				if(!strcmp(prop_value,"off")){
-					rilhw_power(0,kRequestStateReset);
-					DBG("modem power once again");
-					property_set("ril.modem.power","on");
-				}else if(retrycount>(TIMEOUT_MODEM_POWER_PATCH/delays)){
-						retrycount=0;
-						property_set("ril.modem.power","off");
-				}
-				#endif
-				ERROR ("%s() Failed to open AT channel %s (%s), retrying in %d.",
-                    __func__, queueArgs->device_path,
-                    strerror(errno), TIMEOUT_SEARCH_FOR_TTY);
-				pdp_uninit();
-				sleep(delays);
-				goto find_rilhw;
+				failcount++;
+				goto runer_loop;		
 				/* never returns */
 			}
-
-			retrycount=0;
-			
-			
         }
 
         ret = at_open(fd, onUnsolicited);
@@ -1398,6 +1398,7 @@ find_rilhw:
         if (ret < 0) {
             ERROR("%s() AT error %d on at_open", __func__, ret);
             at_close();
+            failcount++;
             continue;
         }
 
@@ -1410,9 +1411,11 @@ find_rilhw:
         if (initializeCommon()) {
             ERROR("%s() Failed to initialize common", __func__);
             at_close();
+            failcount++;
             continue;
         }
 
+	        failcount=0;
 	        q->closed = 0;
 	        at_make_default_channel();
 
@@ -1425,15 +1428,19 @@ find_rilhw:
 
 	            memset(&ts, 0, sizeof(ts));
 
-	        if ((err = pthread_mutex_lock(&q->queueMutex)) != 0)
-	            ERROR("%s() failed to take queue mutex: %s!",
+	            if ((err = pthread_mutex_lock(&q->queueMutex)) != 0)
+	                ERROR("%s() failed to take queue mutex: %s!",
 	                __func__, strerror(err));
 
 	            if (q->closed != 0) {
 	                WARN("%s() AT Channel error, attempting to recover..", __func__);
 	                if ((err = pthread_mutex_unlock(&q->queueMutex)) != 0)
 	                    ERROR("Failed to release queue mutex: %s!", strerror(err));
-	                break;
+	                if(q->closed==2)
+	                    fatalerr=1;
+	                else
+                        failcount++;
+	                break; /* Catch the closed bit at the top of the loop. */
 	            }
 
 	            while (q->closed == 0 && q->requestList == NULL &&
@@ -1494,26 +1501,7 @@ find_rilhw:
         	at_close();
         	ERROR("%s() Re-opening after close", __func__);
     	}else {
-    	
-			int delays=TIMEOUT_SEARCH_FOR_TTY;			
-			#ifdef MODEM_POWER_PATCH
-			char prop_value[PROPERTY_VALUE_MAX];		
-			memset(prop_value,0,PROPERTY_VALUE_MAX);
-			pdp_uninit();	
-			retrycount++;
-			property_get("ril.modem.power",prop_value,"on");
-			if(!strcmp(prop_value,"off")){
-				rilhw_power(0,kRequestStateReset);	
-				DBG("modem power once again");
-				property_set("ril.modem.power","on");
-			}else if(retrycount>(TIMEOUT_MODEM_POWER_PATCH/delays)){
-				retrycount=0;
-				property_set("ril.modem.power","off");
-			}			
-			#endif
-			WARN("no supported rilhw found,retry after %ds\n",delays);		
-			sleep(delays);
-			continue;		
+			failcount++;
 		}
 
 	}
