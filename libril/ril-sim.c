@@ -442,16 +442,12 @@ void  requestSIM_IO(void *data, size_t datalen, RIL_Token t)
     char *cmd = NULL;
     RIL_SIM_IO *p_args;
     char *line;
-	char prop_value[PROPERTY_VALUE_MAX];
-	property_get("ril.sim.io",prop_value,"off");
-	if(!strcmp(prop_value,"off")){
+
+	if(rilhw->no_simio){
 		RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
 		return;
 	}
-	if(rilhw->prefer_net==kPREFER_NETWORK_TYPE_CDMA_EVDV){
-	    RIL_onRequestComplete(t, RIL_E_REQUEST_NOT_SUPPORTED, NULL, 0);
-		return;
-	}
+	
     memset(&sr, 0, sizeof(sr));
 
     p_args = (RIL_SIM_IO *)data;

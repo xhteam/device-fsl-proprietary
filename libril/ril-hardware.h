@@ -46,6 +46,7 @@ typedef struct ril_hardware
 	unsigned int no_pinonoff:1;/*disable pin onoff function*/
 	unsigned int no_suspend:1;/*disable runtime suspend feature*/
 	unsigned int no_ipstack:1;/*prefer to using embedded tcpip stack.if no ipstack,using hosted ip stack*/
+	unsigned int no_simio:1;
 
 	rilhw_hook hook;
 	//internal use

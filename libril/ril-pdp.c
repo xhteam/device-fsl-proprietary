@@ -286,7 +286,7 @@ static int start_pppd(PDATACALL_CONT dc,int  ms)
 	char optionfile[256];
 	char* command;
 	char line[256];
-	INFO("start ppp daemon...");
+	DBG("start ppp daemon...");
 
 	pdp_acquire_wakelock();
 
@@ -542,7 +542,7 @@ static int start_pppd(PDATACALL_CONT dc,int  ms)
 		
 	}		
 	pdp_release_wakelock();
-  	INFO("ppp connection ready.");
+  	DBG("ppp connection ready.");
   	return 0;
 bail:
 	pdp_release_wakelock();
@@ -633,19 +633,28 @@ void reportDataCallStatus(PDATACALL_CONT dc){
 			RIL_onRequestComplete(dc->token, RIL_E_SUCCESS, &response, sizeof(RIL_Data_Call_Response_v6));
 			dc->token=NULL;
 		}else	{			 
-			RIL_Data_Call_Response_v6 response;
+			RIL_Data_Call_Response_v6 response;			
+			memset(&response,0,sizeof(RIL_Data_Call_Response_v6));
 			response.status = PDP_FAIL_NONE;			
 			response.suggestedRetryTime = 0;
 			response.cid = atoi(dc->cid);
 			response.active = dc->active;
-			response.ifname = alloca(strlen(dc->interface) + 1);
-			strcpy(response.ifname,dc->interface);
-			response.type = alloca(strlen(dc->type) + 1);
-			strcpy(response.type,dc->type);			
-			response.dnses= alloca(strlen(dc->dns) + 1);
-			strcpy(response.dnses,dc->dns);
-			response.gateways= alloca(strlen(dc->gw) + 1);
-			strcpy(response.gateways,dc->gw);
+			if(dc->interface){
+				response.ifname = alloca(strlen(dc->interface) + 1);
+				strcpy(response.ifname,dc->interface);
+			}
+			if(dc->type){
+				response.type = alloca(strlen(dc->type) + 1);
+				strcpy(response.type,dc->type);			
+			}
+			if(dc->dns){
+				response.dnses= alloca(strlen(dc->dns) + 1);
+				strcpy(response.dnses,dc->dns);
+			}
+			if(dc->gw){
+				response.gateways= alloca(strlen(dc->gw) + 1);
+				strcpy(response.gateways,dc->gw);
+			}
 			if(dc->address){
 				response.addresses=  alloca(strlen(dc->address) + 1);
 				strcpy(response.addresses,dc->address);
@@ -662,14 +671,19 @@ void reportDataCallStatus(PDATACALL_CONT dc){
 		eventset_set(dc->pdp_eventset,EVENT_STOP);
 	}else if(DATACALL_LINKSTATE_INACTIVE==dc->active){	
 		RIL_Data_Call_Response_v6 response;
+		memset(&response,0,sizeof(RIL_Data_Call_Response_v6));
 		response.status = PDP_FAIL_ERROR_UNSPECIFIED;
 		response.suggestedRetryTime = 0;
 		response.cid = atoi(dc->cid);
-		response.active = dc->active;		
-		response.ifname = alloca(strlen(dc->interface) + 1);
-		strcpy(response.ifname,dc->interface);
-		response.type = alloca(strlen(dc->type) + 1);
-		strcpy(response.type,dc->type);
+		response.active = dc->active;	
+		if(dc->interface){
+			response.ifname = alloca(strlen(dc->interface) + 1);
+			strcpy(response.ifname,dc->interface);
+		}
+		if(dc->type){
+			response.type = alloca(strlen(dc->type) + 1);
+			strcpy(response.type,dc->type);
+		}
 		if(dc->address){
 			response.addresses =  alloca(strlen(dc->address) + 1);
 			strcpy(response.addresses,dc->address);
@@ -1022,7 +1036,7 @@ void requestOrSendPDPContextList(RIL_Token *t)
         goto finally;
 
     responses = alloca(number_of_contexts * sizeof(RIL_Data_Call_Response_v6));
-    memset(responses, 0, sizeof(responses));
+    memset(responses, 0, sizeof(RIL_Data_Call_Response_v6)*number_of_contexts);
 
     for (i = 0; i < number_of_contexts; i++) {
         responses[i].cid = -1;
@@ -1117,12 +1131,14 @@ void requestOrSendPDPContextList(RIL_Token *t)
 			if(pdc&&pdc->address){
 				responses[i].addresses= alloca(strlen(pdc->address) + 1);
 				strcpy(responses[i].addresses, pdc->address);				
-			}else {
+			}else if(strlen(out)){
 				responses[i].addresses = alloca(strlen(out) + 1);
 				strcpy(responses[i].addresses, out);
 			}
-			responses[i].ifname= alloca(strlen(pdc->interface) + 1);
-			strcpy(responses[i].ifname, pdc->interface);
+			if(pdc&&pdc->interface){
+				responses[i].ifname= alloca(strlen(pdc->interface) + 1);
+				strcpy(responses[i].ifname, pdc->interface);
+			}
 			
 		}
     }
