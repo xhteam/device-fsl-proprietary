@@ -411,7 +411,7 @@ error:
  
 void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 {
-    RIL_SignalStrength response={{-1,-1},{-1,-1},{-1,-1,-1}};
+    RIL_SignalStrength response;
     ATResponse *p_response = NULL;
     int err;
     char *line;
@@ -422,6 +422,7 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
     if (err < 0 || p_response->success == 0) {
         goto error;
     }
+	memset(&response,99,sizeof(RIL_SignalStrength));
 
     line = p_response->p_intermediates->line;
 
