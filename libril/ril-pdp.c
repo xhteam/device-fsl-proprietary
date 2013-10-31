@@ -553,6 +553,9 @@ static int stop_pppd(void)
 {
 	char prop_value[PROPERTY_VALUE_MAX];
 	int retry=5;
+	property_get(PPP_SVC_PROP,prop_value,"");
+	if(strcmp(prop_value, "running"))
+		return 0;
 	pdp_acquire_wakelock();
 	property_set("ctl.stop","ppp_daemon");
 	do{
