@@ -573,6 +573,17 @@ static int my_config(int fd,int baudrate,int datebites,int stopbits,int parity)
     tcflush(fd,TCIOFLUSH);
         switch(baudrate)
     {
+    
+		case 1200:
+			//tcflush(fd,TCIOFLUSH);//刷新输入输出缓冲
+			cfsetispeed(&set_port,B1200);//分别设置输入和输出速率
+			cfsetospeed(&set_port,B1200);
+		break;		
+		case 2400:
+			//tcflush(fd,TCIOFLUSH);//刷新输入输出缓冲
+			cfsetispeed(&set_port,B2400);//分别设置输入和输出速率
+			cfsetospeed(&set_port,B2400);
+		break;
 		case 4800:
             //tcflush(fd,TCIOFLUSH);//刷新输入输出缓冲
             cfsetispeed(&set_port,B4800);//分别设置输入和输出速率
