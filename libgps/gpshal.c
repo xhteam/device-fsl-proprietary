@@ -99,13 +99,11 @@ nmea_tokenizer_init( NmeaTokenizer*  t, const char*  p, const char*  end )
         if (q == NULL)
             q = end;
 
-        if (q > p) {
-            if (count < MAX_NMEA_TOKENS) {
-                t->tokens[count].p   = p;
-                t->tokens[count].end = q;
-                count += 1;
-            }
-        }
+         if (count < MAX_NMEA_TOKENS) {
+             t->tokens[count].p   = p;
+             t->tokens[count].end = q;
+             count += 1;
+         }
         if (q < end)
             q += 1;
 
@@ -137,10 +135,6 @@ str2int( const char*  p, const char*  end )
     int   result = 0;
     int   len    = end - p;
 
-    if (len == 0) {
-      return -1;
-    }
-
     for ( ; len > 0; len--, p++ )
     {
         int  c;
@@ -164,12 +158,8 @@ static double
 str2float( const char*  p, const char*  end )
 {
     int   result = 0;
-    int   len    = end - p + 1;
-    char  temp[32];
-
-    if (len == 0) {
-      return -1.0;
-    }
+    int   len    = end - p;
+    char  temp[16];
 
     if (len >= (int)sizeof(temp))
         return 0.;
