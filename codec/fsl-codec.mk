@@ -64,7 +64,7 @@ endif
 
 #for mx6x, it should be up to 1080p profile
 ifeq ($(BOARD_SOC_TYPE),IMX6DQ)
-LOCAL_SRC_FILES := record_profile/media_profiles_1080p.xml
+LOCAL_SRC_FILES := record_profile/media_profiles_480p.xml
 endif
 
 ifeq ($(BOARD_HAVE_USB_CAMERA),true)
