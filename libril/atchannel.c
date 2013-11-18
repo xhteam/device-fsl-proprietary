@@ -813,7 +813,7 @@ static const char *readline()
 		if (count > 0) 
 		{
 			//debug_data("AT RAW",count,(unsigned char*)ATBufferEnd);
-			debug_data("AT<<",count,(unsigned char*)ac->ATBufferEnd);
+			//debug_data("AT<<",count,(unsigned char*)ac->ATBufferEnd);
 
 			ac->ATBufferEnd += count;
 			p_eol=tryALine(ac);

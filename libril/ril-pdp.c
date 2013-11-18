@@ -645,6 +645,9 @@ void reportDataCallStatus(PDATACALL_CONT dc){
 			if(dc->interface){
 				response.ifname = alloca(strlen(dc->interface) + 1);
 				strcpy(response.ifname,dc->interface);
+			}else {
+				response.ifname = alloca(strlen("null") + 1);
+				strcpy(response.ifname,"null");				
 			}
 			if(dc->type){
 				response.type = alloca(strlen(dc->type) + 1);
@@ -682,6 +685,9 @@ void reportDataCallStatus(PDATACALL_CONT dc){
 		if(dc->interface){
 			response.ifname = alloca(strlen(dc->interface) + 1);
 			strcpy(response.ifname,dc->interface);
+		}else {			
+			response.ifname = alloca(strlen("null") + 1);
+			strcpy(response.ifname,"null");
 		}
 		if(dc->type){
 			response.type = alloca(strlen(dc->type) + 1);
@@ -1141,6 +1147,9 @@ void requestOrSendPDPContextList(RIL_Token *t)
 			if(pdc&&pdc->interface){
 				responses[i].ifname= alloca(strlen(pdc->interface) + 1);
 				strcpy(responses[i].ifname, pdc->interface);
+			}else {
+				responses[i].ifname= alloca(strlen("null") + 1);
+				strcpy(responses[i].ifname, "null");				
 			}
 			
 		}
