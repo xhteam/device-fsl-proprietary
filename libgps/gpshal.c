@@ -1259,11 +1259,6 @@ static int gps_init(GpsCallbacks* callbacks) {
 
 	s->callbacks = *callbacks;
 
-	if (!s->init)
-		gps_state_init(s);
-
-    if (s->fd < 0)
-        return -1;
 
     return 0;
 }
@@ -1273,19 +1268,19 @@ static void gps_cleanup() {
 
 	ALOGD("%s", __func__);
 
-	if (s->init)
-		gps_state_deinit(s);
 }
 
 static int gps_start() {
     GpsState*  s = _gps_state;
 
-	if (!s->init) {
-		D("%s: called with uninitialized state !!", __FUNCTION__);
-		gps_state_init(s);
-	}
-
 	ALOGD("%s", __func__);
+
+	if (!s->init)
+		gps_state_init(s);
+
+    if (s->fd < 0)
+        return -1;
+
 
 	gps_state_thread_ctl(s, CMD_START);
 	return 0;
@@ -1298,10 +1293,10 @@ static int gps_stop() {
 		D("%s: called with uninitialized state !!", __FUNCTION__);
 		return -1;
 	}
-
+	
 	ALOGD("%s", __func__);
-
 	gps_state_thread_ctl(s, CMD_STOP);
+	gps_state_deinit(s);
 	return 0;
 }
 
