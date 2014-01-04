@@ -907,6 +907,8 @@ void OnPDPListCheck(void *param){
 			responses[i].active = pdc->active;
 			//restart pdp
 			send_pdp_command(pdc,EVENT_RESTART);
+		}else if(!pdc){
+			continue;
 		}
 
         i++;
@@ -1025,6 +1027,7 @@ void requestOrSendPDPContextList(RIL_Token *t)
     ATLine *cursor;
     int err;
     int number_of_contexts = 0;
+	int valid_contexts=0;
     int i = 0;
     int curr_bearer, fetched;
     char *out;
@@ -1075,12 +1078,12 @@ void requestOrSendPDPContextList(RIL_Token *t)
 
         if (state == 0){
             responses[i].active = 0;  /* 0=inactive */
-			responses[i].status = PDP_FAIL_NONE;
+			responses[i].status = PDP_FAIL_ERROR_UNSPECIFIED;
     	}
         else {
              /* (defaulting to physical link up) */
 			responses[i].active = 2; /* 2=active/physical link up */
-			responses[i].status = PDP_FAIL_ERROR_UNSPECIFIED;
+			responses[i].status = PDP_FAIL_NONE;
         }
 
         i++;
@@ -1137,31 +1140,46 @@ void requestOrSendPDPContextList(RIL_Token *t)
 			char buf[64];
 			sprintf(buf, "%d", responses[i].cid);
 			pdc = finddc(buf);
+			if(!pdc) continue;
+			if(i!=valid_contexts)
+				responses[valid_contexts].cid = responses[i].cid;
 			if(pdc&&pdc->address){
-				responses[i].addresses= alloca(strlen(pdc->address) + 1);
-				strcpy(responses[i].addresses, pdc->address);				
+				responses[valid_contexts].addresses= alloca(strlen(pdc->address) + 1);
+				strcpy(responses[valid_contexts].addresses, pdc->address);				
 			}else if(strlen(out)){
-				responses[i].addresses = alloca(strlen(out) + 1);
-				strcpy(responses[i].addresses, out);
+				responses[valid_contexts].addresses = alloca(strlen(out) + 1);
+				strcpy(responses[valid_contexts].addresses, out);
 			}
 			if(pdc&&pdc->interface){
-				responses[i].ifname= alloca(strlen(pdc->interface) + 1);
-				strcpy(responses[i].ifname, pdc->interface);
+				responses[valid_contexts].ifname= alloca(strlen(pdc->interface) + 1);
+				strcpy(responses[valid_contexts].ifname, pdc->interface);
 			}else {
-				responses[i].ifname= alloca(strlen("null") + 1);
-				strcpy(responses[i].ifname, "null");				
+				responses[valid_contexts].ifname= alloca(strlen("null") + 1);
+				strcpy(responses[valid_contexts].ifname, "null");				
 			}
+			if(pdc&&pdc->dns){
+				responses[valid_contexts].dnses= alloca(strlen(pdc->dns) + 1);
+				strcpy(responses[valid_contexts].dnses,pdc->dns);
+			}
+			if(pdc&&pdc->gw){
+				responses[valid_contexts].gateways= alloca(strlen(pdc->gw) + 1);
+				strcpy(responses[valid_contexts].gateways,pdc->gw);
+			}
+			
+			valid_contexts++;
 			
 		}
     }
 
+	DBG("valid_contexts=%d\n",valid_contexts);
+
 finally:
     if (t != NULL)
         RIL_onRequestComplete(*t, RIL_E_SUCCESS, responses,
-                           number_of_contexts * sizeof(RIL_Data_Call_Response_v6));
+                           valid_contexts * sizeof(RIL_Data_Call_Response_v6));
     else
         RIL_onUnsolicitedResponse(RIL_UNSOL_DATA_CALL_LIST_CHANGED, responses,
-                           number_of_contexts * sizeof(RIL_Data_Call_Response_v6));
+                           valid_contexts * sizeof(RIL_Data_Call_Response_v6));
 
     /*
      * To keep internal list up to date all deactivated contexts are removed
