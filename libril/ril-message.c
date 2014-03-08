@@ -617,9 +617,9 @@ error:
 
 void CheckSMSStorage(void)
 {
-	const struct timespec TIMEVAL_SMS = { 1, 0 };
+	//const struct timespec TIMEVAL_SMS = { 1, 0 };
 
-	enqueueRILEvent (FindUnreadSms, NULL, &TIMEVAL_SMS);
+	//enqueueRILEvent (FindUnreadSms, NULL, &TIMEVAL_SMS);
 }
 
 static void sm_sms_delete(void* param)
