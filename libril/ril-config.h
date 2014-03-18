@@ -5,7 +5,7 @@
 
 //-------------system---------
 
-#define RIL_IMEISV_VERSION  2
+#define RIL_IMEISV_VERSION  0
 #define RIL_DRIVER_VERSION "QRIL 1.1"
 #define MAX_AT_RESPONSE (8 * 1024)
 #define START_PPPD_TIMEOUT 	60 /*10*2=20s*/
