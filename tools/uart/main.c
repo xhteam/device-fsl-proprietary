@@ -601,9 +601,13 @@ static int my_config(int fd,int baudrate,int datebites,int stopbits,int parity)
             cfsetospeed(&set_port,B19200);
             break;
 		case 38400:
-            //tcflush(fd,TCIOFLUSH);//刷新输入输出缓冲
-            cfsetispeed(&set_port,B38400);//分别设置输入和输出速率
+            cfsetispeed(&set_port,B38400);
             cfsetospeed(&set_port,B38400);
+            break;
+       case 115200:
+            //tcflush(fd,TCIOFLUSH);
+            cfsetispeed(&set_port,B115200);
+            cfsetospeed(&set_port,B115200);
             break;
          default:
             cfsetispeed(&set_port,B19200);
