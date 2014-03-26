@@ -190,6 +190,7 @@ typedef struct {
     GpsSvStatus sv_status;
     int     sv_status_changed;
     char    in[ NMEA_MAX_SIZE+1 ];
+    int     gsa_fixed;
 } NmeaReader;
 
 enum update_event_type {
@@ -596,31 +597,43 @@ nmea_reader_parse( NmeaReader*  r )
         }
  
     }else if ( !memcmp(tok.p, "GSA", 3) ) {
-        // do something ?
+
         Token  tok_fixStatus   = nmea_tokenizer_get(tzer, 2);
         int i;
- 
+
         if (tok_fixStatus.p[0] != '\0' && tok_fixStatus.p[0] != '1') {
- 
+
           Token  tok_accuracy      = nmea_tokenizer_get(tzer, 15);
- 
+
           nmea_reader_update_accuracy(r, tok_accuracy);
- 
+
           r->sv_status.used_in_fix_mask = 0ul;
- 
+
           for (i = 3; i <= 14; ++i){
- 
+
             Token  tok_prn  = nmea_tokenizer_get(tzer, i);
             int prn = str2int(tok_prn.p, tok_prn.end);
- 
-            if (prn > 0){
-              r->sv_status.used_in_fix_mask |= (1ul << (32 - prn));
+
+            /* only available for PRN 1-32 */
+            if ((prn > 0) && (prn < 33)){
+              // bug, prn 1 should be put on bit 0
+              // r->sv_status.used_in_fix_mask |= (1ul << (32 - prn));
+              r->sv_status.used_in_fix_mask |= (1ul << (prn-1));
               r->sv_status_changed = 1;
-            //  D("%s: fix mask is %d", __FUNCTION__, r->sv_status.used_in_fix_mask);
+              /* mark this parameter to identify the GSA is in fixed state */
+              r->gsa_fixed = 1;
+              // D("%s: fix mask is %ld (PRN: %d)", __FUNCTION__, r->sv_status.used_in_fix_mask, prn);
             }
- 
+
           }
- 
+
+        }else {
+          if (r->gsa_fixed == 1) {
+            D("%s: GPGSA fixed -> unfixed", __FUNCTION__);
+            r->sv_status.used_in_fix_mask = 0ul;
+            r->sv_status_changed = 1;
+            r->gsa_fixed = 0;
+          }
         }
     } else if ( !memcmp(tok.p, "GSV", 3) ) {
  
@@ -1387,4 +1400,3 @@ struct hw_module_t HAL_MODULE_INFO_SYM = {
     .author = "http://www.quester.com.cn",
     .methods = &gps_module_methods,
 };
-
