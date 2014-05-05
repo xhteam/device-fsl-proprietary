@@ -496,10 +496,16 @@ static int readIntFromFile( const char* file, int* pResult )
 
 int rilhw_power(PST_RIL_HARDWARE hardware,int reqstate)
 {
+	char property[PROPERTY_VALUE_MAX];
 	char buf[64];
 	int len;
 	int ret=-1;
-	int fd = open( "/sys/devices/platform/usb_modem/usb_modem", O_WRONLY );
+	int fd;	
+	int powermonitor_enable=1;
+	property_get("persist.ril.powermonitor", property, "1");
+	powermonitor_enable = atoi(property);
+	if(!powermonitor_enable) return 0;
+	fd = open( "/sys/devices/platform/usb_modem/usb_modem", O_WRONLY );
 	if( fd >= 0 ){
 		len=sprintf(buf,"state %s 100\n",(kRequestStateOn==reqstate)?"on":"off");
 		
