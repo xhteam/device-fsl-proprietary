@@ -36,7 +36,6 @@ RIL_RadioState sState = RADIO_STATE_UNAVAILABLE;
 pthread_mutex_t s_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t s_state_cond = PTHREAD_COND_INITIALIZER;
 
-
 static char* nettype_name[]={
 	"unknown",
 	"GPRS",
@@ -50,7 +49,11 @@ static char* nettype_name[]={
 	"HSDPA",
 	"HSUPA",
 	"HSPA",
-	"EvDo Rev.B"
+	"EvDo Rev.B",
+	"EHRPD",
+	"LTE",
+	"HSPAP",
+	"GSM",
 };
 
 static char* registered_status[] = 
@@ -1173,6 +1176,9 @@ static int _requestNetworkType(void)
 		 error:		 	
 			at_response_free(p_response_op);
 			return 0;//unknown network
+	}else if(kRIL_HW_EM350 == rilhw->model){
+		int network = 14;
+		return network;
 	}
 	else
 	{
@@ -1383,6 +1389,9 @@ static int _requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t
 
 	if(response[3]>12)
 		response[3] = 3;//fallback to umts
+    if(kRIL_HW_EM350 ==rilhw->model){
+        response[3] = RADIO_TECH_LTE;
+    }
     asprintf(&responseStr[0], "%d", response[0]);
     asprintf(&responseStr[1], "%x", response[1]);
     asprintf(&responseStr[2], "%x", response[2]);
@@ -1570,8 +1579,13 @@ static int _requestRegistrationState(void *data, size_t datalen, RIL_Token t)
     int count = 3;
     int i = 0;
 
+    if(kRIL_HW_EM350 ==rilhw->model){
+      cmd = "AT+CEREG?";
+      prefix = "+CEREG:";
+    }else {
     cmd = "AT+CREG?";
     prefix = "+CREG:";
+   }
     
     err = at_send_command_singleline(cmd, prefix, &p_response);
 
@@ -1666,6 +1680,9 @@ static int _requestRegistrationState(void *data, size_t datalen, RIL_Token t)
 
 	if(response[3]>12)
 		response[3] = 3;//fallback to umts
+    if(kRIL_HW_EM350 ==rilhw->model){
+       response[3] = RADIO_TECH_LTE;
+    }
     asprintf(&responseStr[0], "%d", response[0]);
     asprintf(&responseStr[1], "%x", response[1]);
     asprintf(&responseStr[2], "%x", response[2]);

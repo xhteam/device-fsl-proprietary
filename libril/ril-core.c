@@ -159,6 +159,7 @@ static RIL_REQUEST RIL_DISP_TABLE[]=
 	RIL_REQUEST_ENTRY(RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE,requestSTKSendTerminalResponse),
 	*/
 	RIL_REQUEST_ENTRY(-1,requestDebug),
+	RIL_REQUEST_ENTRY(900,requestDebug),
 
 	//terminate
 	RIL_REQUEST_ENTRY(0,NULL),
@@ -268,6 +269,7 @@ static RILRequestGroup RILRequestGroups[] = {
 static void requestDebug(void *data, size_t datalen, RIL_Token t)
 {
 	const char* cmd = ((const char **)data)[0];
+    DBG("requestDebug");
 	if(cmd){		
 	    at_send_command(cmd, NULL);
 	}
@@ -500,9 +502,12 @@ processRequest (int request, void *data, size_t datalen, RIL_Token t)
 {
 	int err = RIL_E_REQUEST_NOT_SUPPORTED;
 
-   if (requestStateFilter(request, t))
-		return;
 
+   if (requestStateFilter(request, t)){
+		DBG("ril debug request filter");
+		return;
+	}
+	
 	PRIL_REQUEST pRequest=RIL_DISP_TABLE;
 	while(pRequest)
 	{
@@ -564,7 +569,7 @@ static const char * getVersion(void)
     return RIL_DRIVER_VERSION;
 }
 
-/**
+/**%
  * Call from RIL to us to make a RIL_REQUEST.
  *
  * Must be completed with a call to RIL_onRequestComplete().
@@ -594,6 +599,7 @@ static void onRequest(int request, void *data, size_t datalen, RIL_Token t)
     r->token = t;
     r->next = NULL;
 
+    
     if ((err = pthread_mutex_lock(&q->queueMutex)) != 0) {
         ERROR("%s() failed to take queue mutex: %s!", __func__, strerror(err));
         assert(0);
@@ -783,6 +789,25 @@ int modem_init(void)
 		if(kRIL_HW_MC8630 ==rilhw->model)
 			at_send_command("AT+CLVL=4", NULL);
 
+	}else if(kRIL_HW_EM350 ==rilhw->model){
+	  /*  No auto-answer */
+	    at_send_command("ATS0=0", NULL);
+
+
+		//full function at initial
+	    at_send_command("AT+CFUN=1", NULL);	
+
+	    /*  Network registration events */
+	    err = at_send_command("AT+CEREG=2", &p_response);
+
+	    /* some handsets -- in tethered mode -- don't support CREG=2 */
+	    if (err < 0 || p_response->success == 0) {
+	        at_send_command("AT+CEREG=1", NULL);
+	    }
+
+	    at_send_command("AT+CGREG=2", NULL);
+
+	
 	}
 	else //GSM
 	{
@@ -810,11 +835,12 @@ int modem_init(void)
 	    at_send_command("AT+CTZR=1", NULL);
 
 
+
 	    /*  Call Waiting notifications */
 	   at_send_command("AT+CCWA=1", NULL);
 
-		 /*  Call Waiting notifications */
-		at_send_command("AT+ZMDS=4", NULL);
+	 /*  Call Waiting notifications */
+	at_send_command("AT+ZMDS=4", NULL);
 
 	    /*  Alternating voice/data off */
 	    at_send_command("AT+CMOD=0", NULL);
@@ -1193,6 +1219,28 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         free(line);
     }
     */
+    else if(strStartsWith(s,"^RSSI:")){
+	int rssi=0;
+        RIL_SignalStrength response;
+	memset(&response,99,sizeof(RIL_SignalStrength));
+         line = strdup(s);
+        at_tok_start(&line);
+        err = at_tok_nextint(&line, &rssi);
+
+        if (err != 0) {
+            ERROR("invalid ^RSSI  line %s\n",s);
+        } else {
+		response.LTE_SignalStrength.signalStrength = rssi;
+		response.LTE_SignalStrength.rsrp = 0x7fffffff;
+		response.LTE_SignalStrength.rsrq = 0x7fffffff;
+		response.LTE_SignalStrength.rssnr = 0x7fffffff;
+		response.LTE_SignalStrength.cqi = 0x7fffffff;
+           	 RIL_onUnsolicitedResponse (
+                	RIL_UNSOL_SIGNAL_STRENGTH,
+               		& response, sizeof(response));
+       	 }
+        free(line);
+   }
     else if(strStartsWith(s,"^DSDORMANT"))
     {
 		int dormanted;
@@ -1485,7 +1533,7 @@ runer_loop:
 	            if ((err = pthread_mutex_unlock(&q->queueMutex)) != 0)
 	                ERROR("%s(): Failed to release queue mutex: %s!",
 	                    __func__, strerror(err));
-
+		    
 	            if (e) {
 	                e->eventCallback(e->param);
 	                free(e);

@@ -127,6 +127,10 @@ void *dupRequestData(int requestId, void *data, size_t datalen)
 	};
     CommandInfo *ci = &s_commandInfo[requestId];
 	if(requestId<0){
+		DBG("ril debug request %s 1",__func__);
+		return ci_dbg.dispatchFunction(data,datalen);
+	}else if(requestId==RIL_REQUEST_RIL_DEBUG){
+		DBG("ril debug request %s",__func__);
 		return ci_dbg.dispatchFunction(data,datalen);
 	}
     return ci->dispatchFunction(data, datalen);

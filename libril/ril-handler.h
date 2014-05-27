@@ -138,6 +138,7 @@ void onUSSDReceived(const char *s);
 //
 //SIM
 //
+#if 0
 /*
  * The following SIM_Status list consist of indexes to combine the result
  * string of 3GPP AT command “AT+CPIN?” (ST-Ericsson version) with RIL API
@@ -167,6 +168,57 @@ typedef enum {
     SIM_SIM_PERSO_PUK = 19,             /* SIM Personalization PUK (unused) */
     SIM_PUK2_PERM_BLOCKED = 20          /* PUK2 is permanently blocked */
 } SIM_Status;
+#endif
+typedef enum {
+    SIM_ABSENT = 0,
+    SIM_NOT_READY = 1,
+    SIM_READY = 2, /* SIM_READY means the radio state is RADIO_STATE_SIM_READY */
+    SIM_PIN = 3,
+    SIM_PUK = 4,
+    SIM_NETWORK_PERSONALIZATION = 5,
+    SIM_NETWORK_PERSO = 5,
+    RUIM_ABSENT = 6,
+    RUIM_NOT_READY = 7,
+    RUIM_READY = 8,
+    RUIM_PIN = 9,
+    RUIM_PUK = 10,
+    RUIM_NETWORK_PERSONALIZATION = 11,
+    SIM_PIN2 = 12, /* SIM PIN2 lock */
+    SIM_PUK2 = 13, /* SIM PUK2 lock */
+    SIM_NETWORK_SUBSET_PERSO = 14, /* Network Subset Personalization */
+    SIM_SERVICE_PROVIDER_PERSO = 15, /* Service Provider Personalization */
+    SIM_CORPORATE_PERSO = 16, /* Corporate Personalization */
+    SIM_SIM_PERSO = 17, /* SIM/USIM Personalization */
+    SIM_STERICSSON_LOCK = 18, /* ST-Ericsson Extended SIM */
+    SIM_BLOCKED = 19, /* SIM card is blocked */
+    SIM_PERM_BLOCKED = 20, /* SIM card is permanently blocked */
+    SIM_NETWORK_PERSO_PUK = 21, /* Network Personalization PUK */
+    SIM_NETWORK_SUBSET_PERSO_PUK = 22, /* Network Subset Perso. PUK */
+    SIM_SERVICE_PROVIDER_PERSO_PUK = 23,/* Service Provider Perso. PUK */
+    SIM_CORPORATE_PERSO_PUK = 24, /* Corporate Personalization PUK */
+    SIM_SIM_PERSO_PUK = 25, /* SIM Personalization PUK (unused) */
+    SIM_PUK2_PERM_BLOCKED = 26 /* PUK2 is permanently blocked */
+} SIM_Status;
+
+typedef enum {
+    UICC_TYPE_UNKNOWN,
+    UICC_TYPE_SIM,
+    UICC_TYPE_USIM,
+} UICC_Type;
+
+/* Huawei E770W subsys_mode spec. */
+typedef enum{
+	SUB_SYSMODE_NO_SERVICE = 0,
+	SUB_SYSMODE_GSM = 1,
+	SUB_SYSMODE_GPRS = 2,
+	SUB_SYSMODE_EDGE = 3,
+	SUB_SYSMODE_WCDMA = 4,
+	SUB_SYSMODE_HSDPA = 5,
+	SUB_SYSMODE_HSUPA = 6,
+	SUB_SYSMODE_HSUPA_HSDPA = 7,
+	SUB_SYSMODE_INVALID = 8,
+}SUB_SYSMODE;
+
 
 
 void onSimStateChanged(const char *s);
