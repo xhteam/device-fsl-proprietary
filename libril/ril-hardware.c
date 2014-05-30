@@ -157,14 +157,14 @@ static ST_RIL_HARDWARE hw_mapping[] =
 		.modem_port 	= "/dev/ttyUSB0",
 	},
 	{
-		.model_name 	= "EM305",
+		.model_name 	= "EM350",
 		.model			= kRIL_HW_EM350,
 		.prefer_net 	= kPREFER_NETWORK_TYPE_TD_SCDMA,
 		.vid			= 0x12d1,
 		.pid			= 0x1506,
 		.service_port	= "/dev/ttyUSB2",
 		.modem_port 	= "/dev/ttyUSB0",
-	},	
+	},
 	{
 		.model_name		= "unknown",
 		.model 			= 0,
