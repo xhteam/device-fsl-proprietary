@@ -21,11 +21,15 @@
 #include "eventset.h"
 #include "ril-handler.h"
 
+#define NDIS_CARDNAME "hed0"
+
 extern int ifc_init(void);
 extern void ifc_close(void);
 extern int ifc_set_addr(const char *name, in_addr_t addr);
 extern int ifc_set_prefixLength(const char *name, int prefixLength);
 extern int ifc_up(const char *name);
+extern int ifc_enable(const char *ifname);
+extern int ifc_disable(const char *ifname);
 
 static int ndis_stat_query(void){
     int err,state;
@@ -313,4 +317,5 @@ void requestDeactivateDataCallEM350(void *data, size_t datalen, RIL_Token t){
     const char * cid = ((const char**)data)[0];	
     at_send_command("AT^NDISDUP=1,0", NULL);
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    ifc_disable(NDIS_CARDNAME);
 }
