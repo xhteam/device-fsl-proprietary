@@ -117,6 +117,9 @@ void requestHangupWaitingOrBackground(void *data, size_t datalen,
 		case kRIL_HW_MC2716:
 		case kRIL_HW_MC8630:
 			at_send_command("AT+CHV", NULL);break;
+		case kRIL_HW_EM350:
+			hangup_ptt_group_p2p_call();
+			break;
 		case kRIL_HW_AD3812:			
 		{	
 			// 3GPP 22.030 6.5.5
@@ -156,6 +159,9 @@ void requestHangupForegroundResumeBackground(void *data, size_t datalen,
 		case kRIL_HW_MC2716:
 		case kRIL_HW_MC8630:
 			at_send_command("AT+CHV", NULL);break;
+		case kRIL_HW_EM350:
+			hangup_ptt_group_p2p_call();
+			break;
 		case kRIL_HW_AD3812:			
 		{
 			// 3GPP 22.030 6.5.5
@@ -195,6 +201,9 @@ void requestSwitchWaitingOrHoldingAndActive(void *data, size_t datalen,
 		case kRIL_HW_MC2716:
 		case kRIL_HW_MC8630:
 			at_send_command("AT+CHV", NULL);break;
+		case kRIL_HW_EM350:
+			hangup_ptt_group_p2p_call();
+			break;
 		case kRIL_HW_AD3812:
 		{
 			err = at_send_command("AT+CHLD=2", &p_response);			
@@ -304,6 +313,7 @@ void requestUDUB(void *data, size_t datalen, RIL_Token t)
           it will call GET_CURRENT_CALLS and determine success that way */
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
+
 /**
  * RIL_REQUEST_SET_MUTE
  *
@@ -319,8 +329,8 @@ void requestSetMute(void *data, size_t datalen, RIL_Token t)
     char *cmd;
     asprintf(&cmd, "AT+CMUT=%d", (int)mute);
     at_send_command(cmd, NULL);
-	free(cmd);
-	RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    free(cmd);
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 }
 
 /**
@@ -334,11 +344,11 @@ void requestGetMute(void *data, size_t datalen, RIL_Token t)
 	int ret;
     int muted;	
     ATResponse *p_response;
-	char* line;
-	ret = at_send_command_singleline("AT+CMUT?","+CMUT:",&p_response);	
-	if(ret||!p_response->success)
-		goto error;
-	line = p_response->p_intermediates->line;
+    char* line;
+    ret = at_send_command_singleline("AT+CMUT?","+CMUT:",&p_response);	
+    if(ret||!p_response->success)
+	goto error;
+    line = p_response->p_intermediates->line;
     ret = at_tok_start(&line);
     if (ret < 0) goto error;
 
@@ -346,11 +356,11 @@ void requestGetMute(void *data, size_t datalen, RIL_Token t)
     if (ret < 0) goto error;
 	
     RIL_onRequestComplete(t, RIL_E_SUCCESS, &muted, sizeof(int));
-	at_response_free(p_response);
-	return;
+    at_response_free(p_response);
+    return;
 error:
-	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-	at_response_free(p_response);
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);
 }
 
 /**
@@ -402,7 +412,10 @@ void requestGetCurrentCalls(void *data, size_t datalen, RIL_Token t)
     int needRepoll = 0;
 	int need_acquire_wakelock=0;
 
-
+    if(kRIL_HW_EM350 ==rilhw->model){
+      requestGetCurrentCallsPTT(data,datalen,t);
+      return;
+    }
 
     err = at_send_command_multiline ("AT+CLCC", "+CLCC:", &p_response);
 
@@ -504,8 +517,9 @@ void requestDial(void *data, size_t datalen, RIL_Token t)
 		
 		free(cmd);
 		
-	}
-	else //gsm
+	}else if(kRIL_HW_EM350 ==rilhw->model){
+		request_ptt_group_p2p_call2(0,p_dial->address);		
+	}else //gsm
 	{
 		switch (p_dial->clir) {
 			case 1: clir = "I"; break;	/*invocation*/
@@ -542,7 +556,13 @@ void requestAnswer(void *data, size_t datalen, RIL_Token t)
     ATResponse *atresponse = NULL;
     int err;
 
-    err = at_send_command("ATA", &atresponse);
+    if(kRIL_HW_EM350 ==rilhw->model){
+        err = at_send_command("AT+CATA", &atresponse);
+	pttcall_call_info_indicate(ePttCallActive,ePttCallInstanceDefault,
+	ePttCallStatusProgressing,eAirInterfaceServiceVoiceP2PCall,
+	0,1);
+    }else
+    	err = at_send_command("ATA", &atresponse);
 
     if (err < 0 || atresponse->success == 0)
         goto error;
@@ -578,6 +598,9 @@ void requestHangup(void *data, size_t datalen, RIL_Token t)
 		case kRIL_HW_MC2716:
 		case kRIL_HW_MC8630:
 			at_send_command("AT+CHV", NULL);
+			break;
+		case kRIL_HW_EM350:
+			hangup_ptt_group_p2p_call();
 			break;
 		case kRIL_HW_AD3812:
 			{				

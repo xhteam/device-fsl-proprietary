@@ -47,6 +47,10 @@
   acCallerPermissionDenied=1208,\
   acCalleePermissionDenied=1209,
 
+enum { 
+ ePttCallInactive=0,
+ ePttCallActive
+};
 enum {
   COMMON_ACTION_CAUSE
   PTT_SPECIFIED_ACTION_CAUSE
@@ -80,6 +84,47 @@ enum {
  ePttGroupOwnerIndNonOrignator=1,
 };
 
+enum {
+ ePttCapVoiceSupported=0x01,
+ ePttCapSmsSupported=0x02,
+ ePttCapPvSupported=0x04,
+};
+
+enum {
+ ePttCallRefPriority0	= 0,
+ ePttCallRefPriority1,
+ ePttCallRefPriority2,
+ ePttCallRefPriority3,
+ ePttCallRefPriority4,
+ ePttCallRefPriority5,
+ ePttCallRefPriority6,
+ ePttCallRefPriority7,
+ ePttCallRefPriority8,
+ ePttCallRefPriority9,
+ ePttCallRefPriority10,
+ ePttCallRefPriority11,
+ ePttCallRefPriority12,
+ ePttCallRefPriority13,
+ ePttCallRefPriority14,
+ ePttCallRefPriority15,
+ ePttCallRefPriorityHighest = ePttCallRefPriority0,
+ ePttCallRefPriorityNormal  = ePttCallRefPriority15,
+};
+
+enum {
+ ePttCallInstanceDefault=0,
+};
+
+enum {
+ ePttCallStatusProgressing=0,
+ ePttCallStatusQueued,
+ ePttCallStatusCalledPartyPaged,
+ ePttCallStatusContinue,
+ ePttCallStatusHangTimeExpired,
+ ePttCallStatusIncoming=99,
+};
+
+
 struct PttEmergencyInfo{
   int type;
   int pid;//for group call ,it's group id,for p2p call,it's callee id
@@ -97,6 +142,17 @@ struct PttGroups{
   struct PttGroupInfo* ginfo;
 };
 
+struct PttCall {
+  int active;
+  int inst;//android require index start from 1,
+  int comm;
+  int state;
+  int isMT;
+  int mode;//0:voice,1:data,2:fax
+  int isMpty;
+  char* number;
+};
+
 int get_ptt_group_info(void);
 int get_ptt_service_info(void);
 int join_ptt_group(int gid,int priority);
@@ -110,9 +166,13 @@ int monitor_ptt_group(int gid);
 int request_ptt_group_master_call(int instance,int aiservice,int priority,int pid);
 int release_ptt_group_master_call(int instance,int pid);
 int request_ptt_group_p2p_call(int instance,int aiservice,int priority,int pid);
-
+int request_ptt_group_p2p_call2(int instance,char* address);
 int hook_ptt_group_p2p_call(void);
 int hangup_ptt_group_p2p_call(void);
+
+void requestGetCurrentCallsPTT(void *data, size_t datalen, RIL_Token t);
+
+void pttcall_call_info_indicate(int active,int inst,int callstatus,int aiservice,int pid,int isMT);
 
 #endif 
 

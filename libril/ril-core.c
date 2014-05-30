@@ -332,8 +332,9 @@ static void requestDebug(void *data, size_t datalen, RIL_Token t)
     if(cmd){	
         ATResponse *atresponse = NULL;
 	int err = at_send_command_raw(cmd, &atresponse);
-	if(!err)
-	    RIL_onRequestComplete(t, RIL_E_SUCCESS, atresponse->p_intermediates->line, sizeof(atresponse->p_intermediates->line));
+	if(!err){
+	    RIL_onRequestComplete(t, RIL_E_SUCCESS, 0,0);
+	}
 	else
 	    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 	at_response_free(atresponse);
@@ -872,9 +873,9 @@ int modem_init(void)
 	    at_response_free(p_response);
 
 	    at_send_command("AT+CGREG=2", NULL);
-	    at_send_command("AT^TVER?", &p_response);
+	    at_send_command_singleline("AT^TVER?","^TVER:",&p_response);
 	    at_response_free(p_response);
-	    at_send_command("AT+CTBI?", &p_response);
+	    at_send_command_singleline("AT+CTBI?","+CTBI:", &p_response);
 	    at_response_free(p_response);
 	}
 	else //GSM
@@ -1332,12 +1333,41 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	}	
 	if(at_tok_hasmore(&line)){
 	  at_tok_nextstr(&line, &speakername);
-	}	
+	}
 
         free(tmp);
 	DBG("PTTCall Speak Granted:%s %s %s",(ePttCallGranted==pttgrant)?"Yes":"No",
 		speakerno?speakerno:"",
 		speakername?speakername:"");
+   }else if(strStartsWith(s,"+CTICN:")){
+   	int inst,callstatus,aiservice,simplex,callpartyid,demandind,priority,pttambientlsn,ptttempgrp;
+	char* tmp =line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &callstatus);
+        at_tok_nextint(&line, &aiservice);
+        at_tok_nextint(&line, &simplex);
+        at_tok_nextint(&line, &callpartyid);
+        at_tok_nextint(&line, &demandind);
+        at_tok_nextint(&line, &priority);
+        at_tok_nextint(&line, &pttambientlsn);
+        at_tok_nextint(&line, &ptttempgrp);
+        free(tmp);
+	DBG("PTTCall incoming call:inst:%d callstatus:%d,ai:%d,simplex:%d,callid:%d,demandind:%d,priority:%d,amblsn:%d,tempgrp:%d",
+		inst,callstatus,aiservice,simplex,callpartyid,demandind,priority,
+		pttambientlsn,ptttempgrp);
+       pttcall_call_info_indicate(ePttCallActive,inst,ePttCallStatusIncoming,aiservice,callpartyid,1);
+       RIL_onUnsolicitedResponse (
+            RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+            NULL, 0);
+   }else if(strStartsWith(s,"+CTCC:")){
+   	int inst,commtype;
+	char* tmp =line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &commtype);
+        free(tmp);
+	DBG("PTTCall Connect:inst:%d comm:%d",inst,commtype);
    }else if(strStartsWith(s,"+CTCR:")){
    	int inst,gid,actioncause;
 	char* tmp =line = strdup(s);
@@ -1348,6 +1378,11 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 
         free(tmp);
 	DBG("PTTCall Release:inst:%d gid:%d ac:%d",inst,gid,actioncause);
+	pttcall_call_info_indicate(ePttCallInactive,0,0,0,0,0);
+	RIL_onUnsolicitedResponse (
+            RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+            NULL, 0);
+
    }else if(strStartsWith(s,"^CPTTINFO:")){
  	static const char* pttstate_names[]={
           "unregistered",
@@ -1381,12 +1416,17 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	encryption=0;
 	if(at_tok_hasmore(&line)){
 	  at_tok_nextint(&line, &encryption);
-	}	
+	}
 
 	free(tmp);
 	DBG("PTT P2PCall inst:%d,status:%s,aiservice:%d,%s %s",inst,
 		(callstatus<11)?callstate_names[callstatus]:"unknown",
 		aiservice,simplex?"Simplex":"Duplex",encryption?"Encryption":"");
+	pttcall_call_info_indicate(ePttCallActive,inst,callstatus,aiservice,0,0);
+	RIL_onUnsolicitedResponse (
+            RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+            NULL, 0);
+       
    }else if(strStartsWith(s,"^DSDORMANT"))
     {
 		int dormanted;

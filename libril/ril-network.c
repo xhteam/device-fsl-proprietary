@@ -36,7 +36,28 @@ RIL_RadioState sState = RADIO_STATE_UNAVAILABLE;
 pthread_mutex_t s_state_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t s_state_cond = PTHREAD_COND_INITIALIZER;
 
-static char* nettype_name[]={
+/*
+typedef enum {
+    RADIO_TECH_UNKNOWN = 0,
+    RADIO_TECH_GPRS = 1,
+    RADIO_TECH_EDGE = 2,
+    RADIO_TECH_UMTS = 3,
+    RADIO_TECH_IS95A = 4,
+    RADIO_TECH_IS95B = 5,
+    RADIO_TECH_1xRTT =  6,
+    RADIO_TECH_EVDO_0 = 7,
+    RADIO_TECH_EVDO_A = 8,
+    RADIO_TECH_HSDPA = 9,
+    RADIO_TECH_HSUPA = 10,
+    RADIO_TECH_HSPA = 11,
+    RADIO_TECH_EVDO_B = 12,
+    RADIO_TECH_EHRPD = 13,
+    RADIO_TECH_LTE = 14,
+    RADIO_TECH_HSPAP = 15, // HSPA+
+    RADIO_TECH_GSM = 16 // Only supports voice
+} RIL_RadioTechnology;
+*/
+static char* radio_tech_name[]={
 	"unknown",
 	"GPRS",
 	"EDGE",
@@ -248,31 +269,23 @@ error:
     RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
 
-/**
- * RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE
- *
- * Requests to set the preferred network type for searching and registering
- * (CS/PS domain, RAT, and operation mode)
- *
- * "data" is int *
- *
- * ((int *)data)[0] is == 0 for GSM/WCDMA (WCDMA preferred)
- * ((int *)data)[0] is == 1 for GSM only
- * ((int *)data)[0] is == 2 for WCDMA only
- * ((int *)data)[0] is == 3 for GSM/WCDMA (auto mode, according to PRL)
- * ((int *)data)[0] is == 4 for CDMA and EvDo (auto mode, according to PRL)
- * ((int *)data)[0] is == 5 for CDMA only
- * ((int *)data)[0] is == 6 for EvDo only
- * ((int *)data)[0] is == 7 for GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL)
- *
- * "response" is NULL
- *
- * Valid errors:
- *  SUCCESS
- *  RADIO_NOT_AVAILABLE (radio resetting)
- *  GENERIC_FAILURE
- *  MODE_NOT_SUPPORTED
- */
+#if 0
+ typedef enum {
+    PREF_NET_TYPE_GSM_WCDMA                = 0, /* GSM/WCDMA (WCDMA preferred) */
+    PREF_NET_TYPE_GSM_ONLY                 = 1, /* GSM only */
+    PREF_NET_TYPE_WCDMA                    = 2, /* WCDMA  */
+    PREF_NET_TYPE_GSM_WCDMA_AUTO           = 3, /* GSM/WCDMA (auto mode, according to PRL) */
+    PREF_NET_TYPE_CDMA_EVDO_AUTO           = 4, /* CDMA and EvDo (auto mode, according to PRL) */
+    PREF_NET_TYPE_CDMA_ONLY                = 5, /* CDMA only */
+    PREF_NET_TYPE_EVDO_ONLY                = 6, /* EvDo only */
+    PREF_NET_TYPE_GSM_WCDMA_CDMA_EVDO_AUTO = 7, /* GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL) */
+    PREF_NET_TYPE_LTE_CDMA_EVDO            = 8, /* LTE, CDMA and EvDo */
+    PREF_NET_TYPE_LTE_GSM_WCDMA            = 9, /* LTE, GSM/WCDMA */
+    PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA  = 10, /* LTE, CDMA, EvDo, GSM/WCDMA */
+    PREF_NET_TYPE_LTE_ONLY                 = 11  /* LTE only */
+} RIL_PreferredNetworkType;
+#endif
+ 
 void requestSetPreferredNetworkType(void *data, size_t datalen,
                                     RIL_Token t)
 {
@@ -289,6 +302,7 @@ void requestSetPreferredNetworkType(void *data, size_t datalen,
 		RIL_onRequestComplete(t,RIL_E_RADIO_NOT_AVAILABLE, NULL, 0);
 		return;
 	}
+
 	if((kRIL_HW_MC2716 == rilhw->model)||
 		(kRIL_HW_MC8630 == rilhw->model))
 	{
@@ -322,8 +336,10 @@ void requestSetPreferredNetworkType(void *data, size_t datalen,
 	    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
 		return ;
 		
-	}
-	else //gsm
+	}else if(kRIL_HW_EM350==rilhw->model){
+	    RIL_onRequestComplete(t, errno, NULL, 0);
+	    return ;
+	}else //gsm
 	{
 
 
@@ -827,8 +843,8 @@ static void _requestCDMARegistrationState(void *data,
     asprintf(&responseStr[2], "%x",0);
     asprintf(&responseStr[3], "%d",net);//radio technology 8 - EvDo Rev. A
     
-	DBG("network type == [%s],register state == %s",
-		nettype_name[net],registered_status[registered]);
+	DBG("radio tech == [%s],register state == %s",
+		radio_tech_name[net],registered_status[registered]);
 	
     ril_status(network_state)=registered;
     RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
@@ -1400,7 +1416,7 @@ static int _requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t
 	ril_status(data_network_state)=response[0];
 
 	DBG("network [%s,%s]",
-		nettype_name[response[3]],registered_status[response[0]]);
+		radio_tech_name[response[3]],registered_status[response[0]]);
 	
 	if(t)
 	    RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
@@ -1565,6 +1581,29 @@ error:
      return -1;
 }
 
+/*
+typedef enum {
+    RADIO_TECH_UNKNOWN = 0,
+    RADIO_TECH_GPRS = 1,
+    RADIO_TECH_EDGE = 2,
+    RADIO_TECH_UMTS = 3,
+    RADIO_TECH_IS95A = 4,
+    RADIO_TECH_IS95B = 5,
+    RADIO_TECH_1xRTT =  6,
+    RADIO_TECH_EVDO_0 = 7,
+    RADIO_TECH_EVDO_A = 8,
+    RADIO_TECH_HSDPA = 9,
+    RADIO_TECH_HSUPA = 10,
+    RADIO_TECH_HSPA = 11,
+    RADIO_TECH_EVDO_B = 12,
+    RADIO_TECH_EHRPD = 13,
+    RADIO_TECH_LTE = 14,
+    RADIO_TECH_HSPAP = 15, // HSPA+
+    RADIO_TECH_GSM = 16 // Only supports voice
+} RIL_RadioTechnology;
+
+*/
+
 static int _requestRegistrationState(void *data, size_t datalen, RIL_Token t)
 {
     int err;
@@ -1689,7 +1728,7 @@ static int _requestRegistrationState(void *data, size_t datalen, RIL_Token t)
 	asprintf(&responseStr[3], "%d", response[3]);
 	ril_status(network_state)=response[0];
 	DBG("network [%s,%s]",
-		nettype_name[response[3]],registered_status[response[0]]);
+		radio_tech_name[response[3]],registered_status[response[0]]);
 	
 	if(t)
 	    RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 14*sizeof(char*));
@@ -1784,7 +1823,7 @@ void requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t)
             asprintf(&responseStr[3], "%d", response[3]);
 			
 			DBG("network type == [%s],register state == %s",
-				nettype_name[response[3]],registered_status[response[0]]);
+				radio_tech_name[response[3]],registered_status[response[0]]);
 
             ril_status(data_network_state)=response[0];
             RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
@@ -1884,31 +1923,23 @@ void requestOperator(void *data, size_t datalen, RIL_Token t)
 	else
 		requestGSMOperator(data,datalen,t);
 }
-/**
- * RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE
- *
- * Query the preferred network type (CS/PS domain, RAT, and operation mode)
- * for searching and registering
- *
- * "data" is NULL
- *
- * "response" is int *
- * ((int *)response)[0] is == 0 for GSM/WCDMA (WCDMA preferred)
- * ((int *)response)[0] is == 1 for GSM only
- * ((int *)response)[0] is == 2 for WCDMA only
- * ((int *)response)[0] is == 3 for GSM/WCDMA (auto mode, according to PRL)
- * ((int *)response)[0] is == 4 for CDMA and EvDo (auto mode, according to PRL)
- * ((int *)response)[0] is == 5 for CDMA only
- * ((int *)response)[0] is == 6 for EvDo only
- * ((int *)response)[0] is == 7 for GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL)
- *
- * Valid errors:
- *  SUCCESS
- *  RADIO_NOT_AVAILABLE
- *  GENERIC_FAILURE
- *
- * See also: RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE
- */
+#if 0
+ typedef enum {
+    PREF_NET_TYPE_GSM_WCDMA                = 0, /* GSM/WCDMA (WCDMA preferred) */
+    PREF_NET_TYPE_GSM_ONLY                 = 1, /* GSM only */
+    PREF_NET_TYPE_WCDMA                    = 2, /* WCDMA  */
+    PREF_NET_TYPE_GSM_WCDMA_AUTO           = 3, /* GSM/WCDMA (auto mode, according to PRL) */
+    PREF_NET_TYPE_CDMA_EVDO_AUTO           = 4, /* CDMA and EvDo (auto mode, according to PRL) */
+    PREF_NET_TYPE_CDMA_ONLY                = 5, /* CDMA only */
+    PREF_NET_TYPE_EVDO_ONLY                = 6, /* EvDo only */
+    PREF_NET_TYPE_GSM_WCDMA_CDMA_EVDO_AUTO = 7, /* GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL) */
+    PREF_NET_TYPE_LTE_CDMA_EVDO            = 8, /* LTE, CDMA and EvDo */
+    PREF_NET_TYPE_LTE_GSM_WCDMA            = 9, /* LTE, GSM/WCDMA */
+    PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA  = 10, /* LTE, CDMA, EvDo, GSM/WCDMA */
+    PREF_NET_TYPE_LTE_ONLY                 = 11  /* LTE only */
+} RIL_PreferredNetworkType;
+#endif
+
 static void requestGSMGetPreferredNetworkType(void *data, size_t datalen,
                                     RIL_Token t)
 {
@@ -1955,6 +1986,10 @@ static void requestGSMGetPreferredNetworkType(void *data, size_t datalen,
 	{
 		//M305 does not support this ,
 		response = 7; //GSM/WCDMA, CDMA, and EvDo (auto mode, according to PRL)
+	}else if(rilhw->model == kRIL_HW_EM350){
+	    response = PREF_NET_TYPE_LTE_CMDA_EVDO_GSM_WCDMA;
+  	    RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(int));
+	    return;
 	}
 	else if(rilhw->model == kRIL_HW_MF210)
 	{
@@ -2221,7 +2256,11 @@ void requestSetLocationUpdates(void *data, size_t datalen, RIL_Token t)
     enable = ((int *) data)[0];
     assert(enable == 0 || enable == 1);
 
-    asprintf(&cmd, "AT+CREG=%d", (enable == 0 ? 1 : 2));
+    if(kRIL_HW_EM350==rilhw->model)
+	asprintf(&cmd, "AT+CEREG=%d", (enable == 0 ? 1 : 2));
+    else 
+	asprintf(&cmd, "AT+CREG=%d", (enable == 0 ? 1 : 2));
+    
     err = at_send_command(cmd, &atresponse);
     free(cmd);
 
@@ -2261,7 +2300,10 @@ void requestNeighboringCellIds(void * data, size_t datalen, RIL_Token t)
 	pp_cellIds[0]=p_cellIds;
 
 	for (i=0;i<4 && err != 0;i++) {
-		err = at_send_command_singleline("AT+CREG?", "+CREG:", &p_response);
+		if(kRIL_HW_EM350==rilhw->model)
+			err = at_send_command_singleline("AT+CEREG?", "+CEREG:", &p_response);
+		else
+			err = at_send_command_singleline("AT+CREG?", "+CREG:", &p_response);
 	}
 
     if (err||!p_response->success||!p_response->p_intermediates) goto error;

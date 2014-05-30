@@ -189,6 +189,8 @@ capttr_failed:
   return err;
 }
 
+static struct PttCall currcall;
+
 int request_ptt_group_p2p_call(int instance,int aiservice,int priority,int pid){
   ATResponse *atresponse = NULL;
   int err;
@@ -207,10 +209,39 @@ int request_ptt_group_p2p_call(int instance,int aiservice,int priority,int pid){
   
   DBG("p2p call okay");
 
+  pttcall_call_info_indicate(ePttCallActive,ePttCallInstanceDefault,ePttCallStatusProgressing,eAirInterfaceServiceVoiceP2PCall,pid,0);
+
 capttd_failed:
   if(atresponse)
     at_response_free(atresponse);
   return err;
+}
+
+int request_ptt_group_p2p_call2(int instance,char* address){
+  ATResponse *atresponse = NULL;
+  int err;
+  char* line;
+  char* cmd;
+  int pid=0;
+  
+  asprintf(&cmd,"AT+CAPTTD=%d,%d,%d,\"%s\"",instance,eAirInterfaceServiceVoiceP2PCall,ePttCallRefPriorityNormal,address);
+  err = at_send_command(cmd,&atresponse);
+  free(cmd);
+  if(err != 0 || atresponse->success == 0){
+    int cme_error;
+    at_get_cme_error(atresponse,(ATCmeError*)&cme_error);
+    ERROR("CAPTTD failed cme error=%d\n",cme_error);    
+    goto capttd_failed;
+  }
+  pid = atoi(address);
+  pttcall_call_info_indicate(ePttCallActive,ePttCallInstanceDefault,ePttCallStatusProgressing,eAirInterfaceServiceVoiceP2PCall,pid,0);
+  DBG("p2p call okay");
+
+capttd_failed:
+  if(atresponse)
+    at_response_free(atresponse);
+  return err;
+  
 }
 
 int hook_ptt_group_p2p_call(void){
@@ -253,3 +284,77 @@ cath_failed:
 
 }
 
+
+
+static int ctccStateToRILState(int state, RIL_CallState *p_state)
+{
+    switch(state) {
+        case 0:
+	case 2: *p_state = RIL_CALL_ACTIVE;   return 0;
+        case 1: *p_state = RIL_CALL_HOLDING;  return 0;
+       // case 2: *p_state = RIL_CALL_DIALING;  return 0;
+        case 3: *p_state = RIL_CALL_ALERTING; return 0;
+        case 4: case 99: *p_state = RIL_CALL_INCOMING; return 0;
+        case 5: *p_state = RIL_CALL_WAITING;  return 0;
+        default: return -1;
+    }
+}
+static void convert_pttcall_to_rilcall(struct PttCall* ptt,RIL_Call* ril){
+  ril->index = ptt->inst+1;//inst seems always start from 0;
+  ctccStateToRILState(ptt->state,&ril->state);
+  ril->number = ptt->number;
+  #if (RIL_VERSION>2)
+  ril->uusInfo = NULL;
+  #endif
+}
+//There is no command to query current call 
+void requestGetCurrentCallsPTT(void *data, size_t datalen, RIL_Token t){
+    int err;
+    ATResponse *p_response;
+    ATLine *p_cur;
+    int countCalls;
+    int countValidCalls;
+    RIL_Call *p_calls=NULL;
+    RIL_Call **pp_calls=NULL;
+    int i;
+
+    //count the calls
+    countCalls = currcall.active?1:0;
+    countValidCalls = 0; 
+    if(countCalls){
+    //yes, there's an array of pointers and then an array of structures 
+    pp_calls = (RIL_Call **)alloca(countCalls * sizeof(RIL_Call *));
+    p_calls = (RIL_Call *)alloca(countCalls * sizeof(RIL_Call));
+    memset (p_calls, 0, countCalls * sizeof(RIL_Call));
+
+    // init the pointer array 
+    for(i = 0; i < countCalls ; i++) {
+        pp_calls[i] = &(p_calls[i]);
+    }
+
+     convert_pttcall_to_rilcall(&currcall,p_calls+countValidCalls);
+     countValidCalls++;
+   }
+    
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, pp_calls,
+            countValidCalls * sizeof (RIL_Call *));
+
+    return;
+error:
+	//
+    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    at_response_free(p_response);    
+}
+
+void pttcall_call_info_indicate(int active,int inst,int callstatus,int aiservice,int pid,int isMT){
+  currcall.active = active;
+  if(active){
+     currcall.inst = inst;
+     currcall.state = callstatus;
+     if(pid){
+     	if(currcall.number) free(currcall.number);
+     	asprintf(&currcall.number,"%d",pid);
+     }
+     currcall.isMT = isMT;
+  }
+}
