@@ -329,6 +329,10 @@ static void freeCallForward(void *data)
 void freeRequestData(int requestId, void *data, size_t datalen)
 {
     CommandInfo *ci = &s_commandInfo[requestId];
+    if(requestId==RIL_REQUEST_RIL_DEBUG){
+ 	freeStrings(data, datalen);
+        return;
+    }
 
     if (ci->dispatchFunction == dispatchInts ||
         ci->dispatchFunction == dispatchRaw ||

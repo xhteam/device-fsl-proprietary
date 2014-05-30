@@ -18,15 +18,17 @@ LOCAL_SRC_FILES:= \
     ril-network.c\
     ril-oem.c\
     ril-pdp.c\
+    ril-pdp-em350.c \
     ril-services.c\
     ril-sim.c\
     ril-device.c\
     ril-stk.c \
-    ril-fake.c
+    ptt.c \
+    ril-fake.c 
 
 
 LOCAL_SHARED_LIBRARIES := \
-    libcutils libutils libril libhardware_legacy
+    libcutils libutils libnetutils libril libhardware_legacy
 
 
 # for asprinf

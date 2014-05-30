@@ -21,6 +21,7 @@
 #include <cutils/properties.h>
 #include "eventset.h"
 #include "ril-handler.h"
+#include "ril-pdp-em350.h"
 
 
 #define USE_32_SUBNET_ROUTE_WORKAROUND 1
@@ -921,6 +922,7 @@ error:
 }
 
 void pdp_check(void){	
+   if(kRIL_HW_EM350 ==rilhw->model) return;
 	enqueueRILEvent(OnPDPListCheck,NULL,NULL);
 }
 
@@ -983,6 +985,10 @@ void requestOrSendPDPContextList(RIL_Token *t)
 	if(!rilhw){
 		if (t != NULL)
 			RIL_onRequestComplete(*t, RIL_E_GENERIC_FAILURE, NULL, 0);
+		return;
+	}
+	if(kRIL_HW_EM350 ==rilhw->model){
+		requestDataCallListEM350(0,0,t);
 		return;
 	}
 	if(rilhw->prefer_net==kPREFER_NETWORK_TYPE_CDMA_EVDV){
@@ -1232,6 +1238,10 @@ void onDataCallListChanged(void *param)
  */
 void requestDataCallList(void *data, size_t datalen, RIL_Token t)
 {
+	if(kRIL_HW_EM350 ==rilhw->model){
+		requestDataCallListEM350(data,datalen,t);
+		return;
+	}
     requestOrSendPDPContextList(&t);
 }
 
@@ -1250,6 +1260,10 @@ void requestSetupDataCall(void *data, size_t datalen, RIL_Token t)
 	ATResponse *p_response;	
 	pthread_t thread;
 	PDATACALL_CONT dc;
+	if(kRIL_HW_EM350 ==rilhw->model){
+	   requestSetupDataCallEM350(data,datalen,t);
+	   return;
+	}
 	//note apn/user/pass may be null
 	radio = ((const char **)data)[0];
 	prof =((const char **)data)[1];
@@ -1393,6 +1407,10 @@ void requestDeactivateDataCall(void *data, size_t datalen, RIL_Token t)
 {
 	const char * cid = ((const char**)data)[0];	
 	PDATACALL_CONT dc = finddc(cid);
+	if(kRIL_HW_EM350 ==rilhw->model){
+	   requestDeactivateDataCallEM350(data,datalen,t);
+	   return;
+	}
 	//hang up current connection
 	DBG("deactivate PDP cid=%s dc[%p]",cid,dc);
 	if(kPREFER_NETWORK_TYPE_CDMA_EVDV==rilhw->prefer_net)

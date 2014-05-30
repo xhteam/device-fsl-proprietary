@@ -407,7 +407,7 @@ static void processLine(const char *line)
             break;
         case SINGLELINE:
 
-            if (ac->response->p_intermediates == NULL
+          if (ac->response->p_intermediates == NULL
                     && strStartsWith(line, ac->responsePrefix)
                )
                 addIntermediate(line);

@@ -438,8 +438,7 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
     err = at_tok_nextint(&line, &ber);
     if (err < 0) goto error;
 
-	if(kRIL_HW_M305==rilhw->model)
-	{
+	if(kRIL_HW_M305==rilhw->model){
 		//100~199 is TDSCDMA extension rscp
 		if(rssi>100)
 		{
@@ -449,14 +448,15 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 				rssi = (rssi*32)/92;
 		}				
 		response.GW_SignalStrength.signalStrength = rssi;			
-	}
-	else
+		response.GW_SignalStrength.bitErrorRate = ber;
+	}else if(kRIL_HW_EM350==rilhw->model){
+		response.LTE_SignalStrength.signalStrength = rssi;
+	}else
 	{
 		response.GW_SignalStrength.signalStrength = rssi;
+		response.GW_SignalStrength.bitErrorRate = ber;
 	}
-	response.GW_SignalStrength.bitErrorRate = ber;
-
-   
+	
     RIL_onRequestComplete(t, RIL_E_SUCCESS,& response, sizeof(response));
 
     at_response_free(p_response);

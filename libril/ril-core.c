@@ -24,7 +24,7 @@
 #include "ril-handler.h"
 #include "sms.h"
 #include "ril-requestdatahandler.h"
-
+#include "ptt.h"
 
 #define MODEM_POWER_PATCH
 #define TIMEOUT_SEARCH_FOR_TTY 5 /* Poll every Xs for the port*/
@@ -32,6 +32,65 @@
 #define TIMEOUT_MODEM_POWER_PATCH 6
 static void requestDebug(void *data, size_t datalen, RIL_Token t);
 
+static void pttDebug(void *data, size_t datalen, RIL_Token t)
+{
+    const char* cmd = ((const char **)data)[0];
+    char* line = strdup(cmd);
+    int action;
+    int err;
+    DBG("%s[%s]",__func__,line);
+    err = at_tok_start(&line);    
+    err = at_tok_nextint(&line, &action);
+    if (err < 0) goto action_failed;
+    if(1==action){
+      get_ptt_group_info();
+    }else if(2==action){
+      int gid,priority;
+      priority=15;
+      err = at_tok_nextint(&line, &gid);
+      if (err < 0) goto action_failed;
+      if(at_tok_hasmore(&line)){
+	at_tok_nextint(&line, &priority);
+      }
+      join_ptt_group(gid,priority);
+    }else if(3==action){
+      int inst,priority,pid;       
+      err = at_tok_nextint(&line, &inst);
+      if (err < 0) goto action_failed;
+      err = at_tok_nextint(&line, &priority);
+      if (err < 0) goto action_failed;
+      err = at_tok_nextint(&line, &pid);
+      if (err < 0) goto action_failed;
+      priority=15;     
+      request_ptt_group_master_call(inst,eAirInterfaceServiceVoiceGroupCall,priority,pid);
+    }else if(4==action){
+      int inst,pid;
+      err = at_tok_nextint(&line, &inst);
+      if (err < 0) goto action_failed;
+      err = at_tok_nextint(&line, &pid);
+      if (err < 0) goto action_failed;
+      release_ptt_group_master_call(inst,pid);
+    }else if(5==action){
+      int inst,pid;
+      err = at_tok_nextint(&line, &inst);
+      if (err < 0) goto action_failed;
+      err = at_tok_nextint(&line, &pid);
+      if (err < 0) goto action_failed;
+      request_ptt_group_p2p_call(inst,eAirInterfaceServiceVoiceP2PCall,15,pid);
+    }else if(6==action){
+      hangup_ptt_group_p2p_call();
+    }else if(7==action){
+      hook_ptt_group_p2p_call();
+    }
+
+    free(line);
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    return;
+action_failed:
+    DBG("ptt debug failed");
+    free(line);
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+}
 #define RIL_REQUEST_ENTRY(req,dispatch) {req,dispatch}
 
 typedef void (*request_dispatch)(void *data, size_t datalen, RIL_Token t);
@@ -158,8 +217,9 @@ static RIL_REQUEST RIL_DISP_TABLE[]=
 	RIL_REQUEST_ENTRY(RIL_REQUEST_STK_SEND_ENVELOPE_COMMAND,requestSTKSendEnvelopeCommand),
 	RIL_REQUEST_ENTRY(RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE,requestSTKSendTerminalResponse),
 	*/
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_DEBUG,pttDebug),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_RIL_DEBUG,requestDebug),
 	RIL_REQUEST_ENTRY(-1,requestDebug),
-	RIL_REQUEST_ENTRY(900,requestDebug),
 
 	//terminate
 	RIL_REQUEST_ENTRY(0,NULL),
@@ -268,13 +328,18 @@ static RILRequestGroup RILRequestGroups[] = {
 
 static void requestDebug(void *data, size_t datalen, RIL_Token t)
 {
-	const char* cmd = ((const char **)data)[0];
-    DBG("requestDebug");
-	if(cmd){		
-	    at_send_command(cmd, NULL);
-	}
-    /* Echo back data */
-    RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+    const char* cmd = ((const char **)data)[0];
+    if(cmd){	
+        ATResponse *atresponse = NULL;
+	int err = at_send_command_raw(cmd, &atresponse);
+	if(!err)
+	    RIL_onRequestComplete(t, RIL_E_SUCCESS, atresponse->p_intermediates->line, sizeof(atresponse->p_intermediates->line));
+	else
+	    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+	at_response_free(atresponse);
+    }else {
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+    }    
 }
 /**
  * Enqueue a RILEvent to the request queue.
@@ -804,10 +869,13 @@ int modem_init(void)
 	    if (err < 0 || p_response->success == 0) {
 	        at_send_command("AT+CEREG=1", NULL);
 	    }
+	    at_response_free(p_response);
 
 	    at_send_command("AT+CGREG=2", NULL);
-
-	
+	    at_send_command("AT^TVER?", &p_response);
+	    at_response_free(p_response);
+	    at_send_command("AT+CTBI?", &p_response);
+	    at_response_free(p_response);
 	}
 	else //GSM
 	{
@@ -832,10 +900,7 @@ int modem_init(void)
 
 	    /*  auto zone update and report*/
 	    at_send_command("AT+CTZU=1", NULL);
-	    at_send_command("AT+CTZR=1", NULL);
-
-
-
+	   
 	    /*  Call Waiting notifications */
 	   at_send_command("AT+CCWA=1", NULL);
 
@@ -1027,7 +1092,8 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
     } 
 	else if (strStartsWith(s,"+CREG:")
                 || strStartsWith(s,"+CGREG:")
-                || strStartsWith(s,"^MODE:") ) 
+                || strStartsWith(s,"^MODE:")
+		|| strStartsWith(s,"^NDISSTAT:") ) 
     {
 		enqueueRILEvent(onDataCallListChanged, NULL, NULL);
 		RIL_onUnsolicitedResponse ( //@@
@@ -1219,11 +1285,11 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         free(line);
     }
     */
-    else if(strStartsWith(s,"^RSSI:")){
+    else if(strStartsWith(s,"^RSSI:")){	
 	int rssi=0;
         RIL_SignalStrength response;
 	memset(&response,99,sizeof(RIL_SignalStrength));
-         line = strdup(s);
+        char* tmp =line = strdup(s);
         at_tok_start(&line);
         err = at_tok_nextint(&line, &rssi);
 
@@ -1231,17 +1297,97 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
             ERROR("invalid ^RSSI  line %s\n",s);
         } else {
 		response.LTE_SignalStrength.signalStrength = rssi;
-		response.LTE_SignalStrength.rsrp = 0x7fffffff;
-		response.LTE_SignalStrength.rsrq = 0x7fffffff;
-		response.LTE_SignalStrength.rssnr = 0x7fffffff;
-		response.LTE_SignalStrength.cqi = 0x7fffffff;
            	 RIL_onUnsolicitedResponse (
                 	RIL_UNSOL_SIGNAL_STRENGTH,
                		& response, sizeof(response));
        	 }
-        free(line);
-   }
-    else if(strStartsWith(s,"^DSDORMANT"))
+        free(tmp);
+   }else if(strStartsWith(s,"+CGAL:")){
+   
+   }else if(strStartsWith(s,"+CAPTTG:")){
+	int inst,gid,pttgrant,actioncause,ownerind;
+	char* tmp =line = strdup(s);
+  	ownerind=1;
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &gid);
+        at_tok_nextint(&line, &pttgrant);
+        at_tok_nextint(&line, &actioncause);
+	if(at_tok_hasmore(&line)){
+	  at_tok_nextint(&line, &ownerind);
+	}
+        free(tmp);
+	DBG("PTTCall Grant:inst:%d,gid:%d,%s,ac:%d,owner:%s",inst,gid,(ePttCallGranted==pttgrant)?"granted":
+		(ePttCallDenied==pttgrant)?"denied":"queued",actioncause,
+		(ePttGroupOwnerIndOrignator==ownerind)?"Originator":"NonOriginator");
+   }else if(strStartsWith(s,"+CSIND:")){
+   	int pttgrant;
+	char* speakerno,*speakername;
+	char* tmp =line = strdup(s);
+	speakerno=speakername=NULL;
+        at_tok_start(&line);
+        at_tok_nextint(&line, &pttgrant);
+	if(at_tok_hasmore(&line)){
+	  at_tok_nextstr(&line, &speakerno);
+	}	
+	if(at_tok_hasmore(&line)){
+	  at_tok_nextstr(&line, &speakername);
+	}	
+
+        free(tmp);
+	DBG("PTTCall Speak Granted:%s %s %s",(ePttCallGranted==pttgrant)?"Yes":"No",
+		speakerno?speakerno:"",
+		speakername?speakername:"");
+   }else if(strStartsWith(s,"+CTCR:")){
+   	int inst,gid,actioncause;
+	char* tmp =line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &gid);
+        at_tok_nextint(&line, &actioncause);
+
+        free(tmp);
+	DBG("PTTCall Release:inst:%d gid:%d ac:%d",inst,gid,actioncause);
+   }else if(strStartsWith(s,"^CPTTINFO:")){
+ 	static const char* pttstate_names[]={
+          "unregistered",
+           "group not joined",
+           "group idle","group monitor","group master idle","group master monitor","group paused?","p2p call MO","p2p call MT","MO paused?","MT paused?" 
+	};
+   	int pttstate;
+	char* tmp = line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &pttstate);        
+	free(tmp);
+	DBG("PTTCall State:%s",(pttstate<11)?pttstate_names[pttstate]:"unknown");
+   }else if(strStartsWith(s,"+CTOCP:")){
+ 	static const char* callstate_names[]={
+	  "call progressing",//0
+	  "call queued",//1
+	  "call party paged",//2
+ 	  "call continue",//3
+	  "hang time expired",	  //4
+	};
+   	int inst,callstatus,aiservice,simplex,encryption;
+	char* tmp = line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &callstatus);
+        at_tok_nextint(&line, &aiservice);
+	simplex = 0;
+	if(at_tok_hasmore(&line)){
+	  at_tok_nextint(&line, &simplex);
+	}	
+	encryption=0;
+	if(at_tok_hasmore(&line)){
+	  at_tok_nextint(&line, &encryption);
+	}	
+
+	free(tmp);
+	DBG("PTT P2PCall inst:%d,status:%s,aiservice:%d,%s %s",inst,
+		(callstatus<11)?callstate_names[callstatus]:"unknown",
+		aiservice,simplex?"Simplex":"Duplex",encryption?"Encryption":"");
+   }else if(strStartsWith(s,"^DSDORMANT"))
     {
 		int dormanted;
         line = strdup(s);
