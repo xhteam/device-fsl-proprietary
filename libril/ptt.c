@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <telephony/ril.h>
+#include <telephony/ril_ptt.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -21,6 +22,20 @@
 #include "eventset.h"
 #include "ril-handler.h"
 #include "ptt.h"
+
+#define MAX_BLOCK_INDICATOR 8
+
+static const char *BlockedIndicator[] = {
+/* 0 */	"IMSI & IMEI both Remote ON",
+/* 1 */	"IMSI temporarily Remote OFF, IMEI Remote ON",
+/* 2 */	"IMSI permanently Remote OFF, IMEI Remote ON",
+/* 3 */	"IMSI Remote ON, IMEI temporarily Remote OFF",
+/* 4 */	"IMSI Remote ON, IMEI permanently Remote OFF",
+/* 5 */	"IMSI temporarily Remote OFF, IMEI permanently Remote OFF",
+/* 6 */ "IMSI permanently Remote OFF, IMEI temporarily Remote OFF",
+/* 7 */ "IMSI & IMEI both temporarily Remote OFF",
+/* 8 */ "IMSI &	IMEI both permanently Remote OFF",
+};
 
 static char* NextSplit(char **p_cur,char split)
 {
@@ -359,21 +374,265 @@ void pttcall_call_info_indicate(int active,int inst,int callstatus,int aiservice
   }
 }
 
-void requestPttQueryAvailableGroups(void *data, size_t datalen, RIL_Token t){	
+static struct ActionCauses action_cause[] = { 
+	/* common cuases */
+	{0   , "ok"},
+	{31  , "network timeout"},
+	{1001, "network error"},
+	{1002, "unsigned number error"},
+	{1003, "user authentication failed"},
+	{1004, "service option not supported"},
+	{1005, "requested service option not subscribed"},
+	{1006, "unspecified error"},
+	{1007, "invalid parameter"},
+	{1008, "network detach"},
+	{1009, "high priority task interrupt"},
+	{1010, "NAS Inner Error"},
+	{1011, "IMSI is temporarily blocked"},
+	{1012, "IMSI is permanently blocked"},
+	{1013, "User Low Priority"},
+	{1014, "No PTT Capability"},
+	/* ptt causes */
+	{1100, "Operation Success"},
+	{1101, "group owner close"},
+	{1102, "dispatcher close"},
+	{1103, "timeout close"},
+	{1104, "speaker token timeout"},
+	{1105, "release for high priority user"},
+	{1106, "queue timeout"},
+	{1107, "force to cancel queue"},
+	{1108, "requested group not subscribed"},
+	{1109, "queue buffer is full"},
+	{1110, "not group owner"},
+	{1111, "user interrupt"},
+	{1112, "Set Failure"},
+	{1113, "Out of Service"},
+	{1114, "Normal Release"},
+	/* ptp causes */
+	{1201, "Normal Call Clearing"},
+	{1202, "User Busy"},
+	{1203, "No User Responding"},
+	{1204, "User Alerting No Answer"},
+	{1205, "Call Rejected"},
+	{1206, "Invalid Number Format"},
+	{1207, "User In High Priority Task"},
+	{1208, "Caller Permission Denied"},
+	{1209, "Callee Permission Denied"},
+};
+
+static const char* ptt_getActionCause(int ac){
+	int length=sizeof(action_cause)/sizeof(action_cause[0]);
+	int i;
+	for(i=0;i<length;i++){
+		if(action_cause[i].err == ac)
+			return action_cause[i].cause;
+	}
+	return action_cause[0].cause;
 }
-void requestPttGroupSetup(void *data, size_t datalen, RIL_Token t){	
+
+void requestPttQueryAvailableGroups(void *data, size_t datalen, RIL_Token t){
+	
 }
-void requestPttGroupRelease(void *data, size_t datalen, RIL_Token t){	
+void requestPttGroupSetup(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int gid,priority,indicator;
+	char cmd[256];
+	int err;
+	int response=acOK;
+	priority=indicator=-1;
+	gid = ((int*)data)[0];
+	datalen--;
+	if(datalen>0)
+		priority = ((int*)data)[1];
+	datalen--;
+	if(datalen>0)
+		indicator = ((int*)data)[2];
+	if(indicator>=0)
+		sprintf(cmd,"AT+CTGS=%d,%d,%d",gid,priority,indicator);	
+	else if(priority>=0)
+		sprintf(cmd,"AT+CTGS=%d,%d",gid,priority);
+	else
+		sprintf(cmd,"AT+CTGS=%d",gid);
+	err = at_send_command(cmd,&p_response);	
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(int));
+	return;
+error:
+	at_get_cme_error(p_response,(ATCmeError *)&response);
+	DBG("ActionCause:%s\n",ptt_getActionCause(response));
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &response, sizeof(int));	
 }
-void requestPttCallDial(void *data, size_t datalen, RIL_Token t){	
+void requestPttGroupRelease(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int ccinstance,gid;
+	char cmd[256];
+	int err;
+	int response=acOK;
+	ccinstance = ((int*)data)[0];
+	gid = ((int*)data)[1];
+	sprintf(cmd,"AT+CTGR=%d,%d",ccinstance,gid);	
+	err = at_send_command(cmd,&p_response);
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(int));
+	return;
+error:
+	at_get_cme_error(p_response,(ATCmeError *)&response);
+	DBG("ActionCause:%s\n",ptt_getActionCause(response));
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, &response, sizeof(int));	
 }
-void requestPttCallHangup(void *data, size_t datalen, RIL_Token t){	
+void requestPttCallDial(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int ccinstance,ai,priority,partyid;
+	char cmd[256];
+	int err;
+	ccinstance = ((int*)data)[0];
+	ai = ((int*)data)[1];
+	priority = ((int*)data)[2];
+	partyid = ((int*)data)[3];
+	sprintf(cmd,"AT+CAPTTD=%d,%d,%d,\"%d\"",ccinstance,ai,priority,partyid);	
+	err = at_send_command(cmd,&p_response);
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+	return;
+error:
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 }
-void requestPttCurrentGroupScanlistUpdate(void *data, size_t datalen, RIL_Token t){	
+void requestPttCallHangup(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int ccinstance,gid;
+	char cmd[256];
+	int err;
+	ccinstance = ((int*)data)[0];
+	gid = ((int*)data)[1];
+	sprintf(cmd,"AT+CAPTTR=%d,%d",ccinstance,gid);	
+	err = at_send_command(cmd,&p_response);
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+	return;
+error:
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);	
+
 }
-void requestPttQueryBlockedIndicator(void *data, size_t datalen, RIL_Token t){	
+void requestPttCurrentGroupScanlistUpdate(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int i,len;
+	char cmd[256];
+	int err;
+	char ret;
+
+	len=sprintf(cmd,"AT+CGSU=%d,\"",((int*)data)[0]);
+	datalen--;
+	i=1;
+	while(datalen-->0){
+		len+=sprintf(cmd+len,"%d ",((int*)data)[i++]);
+	}
+	len+=sprintf(cmd+len,"\"");
+	
+	err = at_send_command(cmd,&p_response);
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
+	return;
+error:
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);	
+
+}
+void requestPttQueryBlockedIndicator(void *data, size_t datalen, RIL_Token t){
+    ATResponse *p_response = NULL;
+	int response;
+    int err;
+    char *line;
+    char ret;
+
+    err = at_send_command_singleline("AT+CTBI?", "+CTBI:", &p_response);
+
+    if (err < 0 || p_response->success == 0) {
+        // assume radio is off
+        goto error;
+    }
+
+    line = p_response->p_intermediates->line;
+
+    err = at_tok_start(&line);
+    if (err < 0) goto error;
+
+    err = at_tok_nextint(&line, &response);
+    if (err < 0) goto error;
+
+    at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, &response,sizeof(int));
+	return;
+error:
+    at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);	
 }
 void requestPttDeviceInfo(void *data, size_t datalen, RIL_Token t){	
+    ATResponse *p_response = NULL;
+	int responses[3];
+    int err;
+    char *line;
+    char ret;
+
+    err = at_send_command_singleline("AT+CDINFO?", "+CDINFO:", &p_response);
+
+    if (err < 0 || p_response->success == 0) {
+        // assume radio is off
+        goto error;
+    }
+
+    line = p_response->p_intermediates->line;
+
+    err = at_tok_start(&line);
+    if (err < 0) goto error;
+
+    err = at_tok_nextint(&line, &responses[0]);
+    if (err < 0) goto error;
+    err = at_tok_nextint(&line, &responses[1]);
+    if (err < 0) goto error;
+    err = at_tok_nextint(&line, &responses[2]);
+    if (err < 0) goto error;
+
+    at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, responses,3*sizeof(int));
+	return;
+error:
+    at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+
 }
 void requestPttBizState(void *data, size_t datalen, RIL_Token t){
 	

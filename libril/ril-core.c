@@ -1,5 +1,6 @@
 #include <telephony/ril.h>
 #include <telephony/ril_cdma_sms.h>
+#include <telephony/ril_ptt.h>
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>

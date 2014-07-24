@@ -115,6 +115,7 @@ enum {
  ePttCallInstanceDefault=0,
 };
 
+/*
 enum {
  ePttCallStatusProgressing=0,
  ePttCallStatusQueued,
@@ -122,9 +123,10 @@ enum {
  ePttCallStatusContinue,
  ePttCallStatusHangTimeExpired,
  ePttCallStatusIncoming=99,
-};
+};*/
 
 
+/*
 struct PttEmergencyInfo{
   int type;
   int pid;//for group call ,it's group id,for p2p call,it's callee id
@@ -140,7 +142,7 @@ struct PttGroups{
   int dyn_groups_number;
   char* tun;
   struct PttGroupInfo* ginfo;
-};
+};*/
 
 struct PttCall {
   int active;
