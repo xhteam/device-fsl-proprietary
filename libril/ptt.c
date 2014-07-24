@@ -50,7 +50,7 @@ static char* NextSplit(char **p_cur,char split)
     return NULL;
 }
 //parse +CGIU: 2;0; ”12345”;1,2; 1,10,0,””; 2,0,0,”X-man”
-static int parse_cgiu(char* line,PttGroups* pgs){
+int parse_cgiu(char* line,PttGroups* pgs){
   char *start,*p,*p1;
   int group_number,dyn_group_number;
   char* tun;
@@ -125,7 +125,7 @@ static int parse_cgiu(char* line,PttGroups* pgs){
   return 0;  
   
 }
-static void free_ptt_groups(PttGroups* pgs){
+void free_ptt_groups(PttGroups* pgs){
 	int index=0;
 	if(pgs->tun) free(pgs->tun);
 	for(;index<(pgs->dyn_groups_number+pgs->groups_number);index++)
@@ -474,7 +474,8 @@ void requestPttQueryAvailableGroups(void *data, size_t datalen, RIL_Token t){
   if(atresponse)
 	at_response_free(atresponse);  
   
-  RIL_onRequestComplete(t, RIL_E_SUCCESS, &pgs,sizeof(pgs));	  
+  RIL_onRequestComplete(t, RIL_E_SUCCESS, &pgs,sizeof(pgs));
+  free_ptt_groups(&pgs);
   return;
   
 ptt_get_failed:

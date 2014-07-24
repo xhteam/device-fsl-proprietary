@@ -1,6 +1,7 @@
 #ifndef _RIL_HANDLER_H_
 #define _RIL_HANDLER_H_
-
+#include <telephony/ril.h>
+#include <telephony/ril_ptt.h>
 #include "at_tok.h"
 #include "atchannel.h"
 #include "ril-core.h"

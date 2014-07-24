@@ -155,6 +155,10 @@ struct PttCall {
   char* number;
 };
 
+int parse_cgiu(char* line,PttGroups* pgs);
+void free_ptt_groups(PttGroups* pgs);
+
+
 int get_ptt_group_info(void);
 int get_ptt_service_info(void);
 int join_ptt_group(int gid,int priority);

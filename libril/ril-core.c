@@ -1327,11 +1327,27 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
        	 }
         free(tmp);
    }else if(strStartsWith(s,"+CGAL:")){
-   
+	   	int groups[320];
+		int total;
+		int index=1;
+		char* tmp =line = strdup(s);
+
+        at_tok_start(&line);
+        at_tok_nextint(&line, &groups[0]);
+		total = groups[0];
+		while((total-->0)&&at_tok_hasmore(&line)){
+			 at_tok_nextint(&line, &groups[index++]);
+		}
+		free(tmp);
+		
+		RIL_onUnsolicitedResponse (
+				   RIL_UNSOL_PTT_CURRENT_GROUP_ACTIVE_LIST,
+				   groups, sizeof(int)*(groups[0]+1));
+		
    }else if(strStartsWith(s,"+CAPTTG:")){
 	int inst,gid,pttgrant,actioncause,ownerind;
 	char* tmp =line = strdup(s);
-  	ownerind=1;
+  	ownerind=ePttGroupOwnerIndNonOrignator;
         at_tok_start(&line);
         at_tok_nextint(&line, &inst);
         at_tok_nextint(&line, &gid);
@@ -1344,6 +1360,18 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	DBG("PTTCall Grant:inst:%d,gid:%d,%s,ac:%d,owner:%s",inst,gid,(ePttCallGranted==pttgrant)?"granted":
 		(ePttCallDenied==pttgrant)?"denied":"queued",actioncause,
 		(ePttGroupOwnerIndOrignator==ownerind)?"Originator":"NonOriginator");
+			{
+				int reponses[5];
+				reponses[0] = inst;
+				reponses[1] = gid;
+				reponses[2] = pttgrant;
+				reponses[3] = actioncause;
+				reponses[4] = ownerind;
+				RIL_onUnsolicitedResponse (
+                	RIL_UNSOL_PTT_CALL_INDICATOR,
+               		reponses, sizeof(int)*5);
+			}
+		
    }else if(strStartsWith(s,"+CSIND:")){
    	int pttgrant;
 	char* speakerno,*speakername;
@@ -1358,10 +1386,26 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	  at_tok_nextstr(&line, &speakername);
 	}
 
-        free(tmp);
 	DBG("PTTCall Speak Granted:%s %s %s",(ePttCallGranted==pttgrant)?"Yes":"No",
 		speakerno?speakerno:"",
 		speakername?speakername:"");
+	{
+		char* reponses[3]={0};
+		int num=1;
+		asprintf(&reponses[0],"%d",pttgrant);
+		if(speakerno){
+			asprintf(&reponses[1],speakerno);
+			num++;
+		}
+		if(speakername){
+			asprintf(&reponses[2],speakername);
+			num++;
+		}
+		RIL_onUnsolicitedResponse(RIL_UNSOL_PTT_NOTIFICATION_DIAL,reponses,sizeof(char*)*num);
+		for(num=0;num<3;num++)
+			if(reponses[num]) free(reponses[num]);
+	}
+        free(tmp);
    }else if(strStartsWith(s,"+CTICN:")){
    	int inst,callstatus,aiservice,simplex,callpartyid,demandind,priority,pttambientlsn,ptttempgrp;
 	char* tmp =line = strdup(s);
@@ -1383,6 +1427,23 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
        RIL_onUnsolicitedResponse (
             RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
             NULL, 0);
+	   {
+	   	
+			int reponses[9];
+			reponses[0] = inst;
+			reponses[1] = callstatus;
+			reponses[2] = aiservice;
+			reponses[3] = simplex;
+			reponses[4] = callpartyid;
+			reponses[5] = demandind;
+			reponses[6] = priority;
+			reponses[7] = pttambientlsn;
+			reponses[8] = ptttempgrp;
+				
+		RIL_onUnsolicitedResponse (
+	            RIL_UNSOL_PTT_NOTIFICATION_CALL,
+	            reponses, sizeof(int)*9);
+       }
    }else if(strStartsWith(s,"+CTCC:")){
    	int inst,commtype;
 	char* tmp =line = strdup(s);
@@ -1391,6 +1452,35 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         at_tok_nextint(&line, &commtype);
         free(tmp);
 	DBG("PTTCall Connect:inst:%d comm:%d",inst,commtype);
+		{
+				int reponses[2];
+				reponses[0] = inst;
+				reponses[1] = commtype;
+				RIL_onUnsolicitedResponse (
+                	RIL_UNSOL_PTT_CALL_CONNECT,
+               		reponses, sizeof(int)*2);
+		}
+   }else if(strStartsWith(s,"+CTGR:")){
+   	int inst,gid,pttcause;
+	char* tmp =line = strdup(s);
+        at_tok_start(&line);
+        at_tok_nextint(&line, &inst);
+        at_tok_nextint(&line, &gid);
+        at_tok_nextint(&line, &pttcause);
+
+        free(tmp);
+	DBG("Group Release:inst:%d gid:%d ac:%d",inst,gid,pttcause);
+
+		{
+			int reponses[3];
+				reponses[0] = inst;
+				reponses[1] = gid;
+				reponses[2] = pttcause;
+		RIL_onUnsolicitedResponse (
+	            RIL_UNSOL_PTT_GROUP_RELEASE,
+	            reponses, sizeof(int)*3);
+		}
+
    }else if(strStartsWith(s,"+CTCR:")){
    	int inst,gid,actioncause;
 	char* tmp =line = strdup(s);
@@ -1405,6 +1495,15 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	RIL_onUnsolicitedResponse (
             RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
             NULL, 0);
+		{
+			int reponses[3];
+				reponses[0] = inst;
+				reponses[1] = gid;
+				reponses[2] = actioncause;
+		RIL_onUnsolicitedResponse (
+	            RIL_UNSOL_PTT_CALL_HANGUP,
+	            reponses, sizeof(int)*3);
+		}
 
    }else if(strStartsWith(s,"^CPTTINFO:")){
  	static const char* pttstate_names[]={
@@ -1418,6 +1517,30 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         at_tok_nextint(&line, &pttstate);        
 	free(tmp);
 	DBG("PTTCall State:%s",(pttstate<11)?pttstate_names[pttstate]:"unknown");
+   }else if(strStartsWith(s,"+CTBI:")){
+	   int ctbi;
+	   char* tmp = line = strdup(s);
+		   at_tok_start(&line);
+		   at_tok_nextint(&line, &ctbi);		
+	   free(tmp);
+	   {
+			int reponses[3];
+				reponses[0] = ctbi;
+		RIL_onUnsolicitedResponse (
+	            RIL_UNSOL_PTT_BLOCKED_INDICATOR,
+	            reponses, sizeof(int)*1);
+		}
+   	
+   }else if(strStartsWith(s,"+CGIU:")){
+	   int ctbi;
+	   PttGroups pgs;
+	   char* tmp = line = strdup(s);
+	   parse_cgiu(line,&pgs);
+	   RIL_onUnsolicitedResponse(
+			   RIL_UNSOL_PTT_AVAILABLE_GROUP_CHANGED,
+			   &pgs, sizeof(pgs));
+	   free_ptt_groups(&pgs);
+	   free(tmp);   	
    }else if(strStartsWith(s,"+CTOCP:")){
  	static const char* callstate_names[]={
 	  "call progressing",//0
@@ -1449,6 +1572,17 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	RIL_onUnsolicitedResponse (
             RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
             NULL, 0);
+		{
+			int reponses[5];
+				reponses[0] = inst;
+				reponses[1] = callstatus;
+				reponses[2] = aiservice;				
+				reponses[1] = simplex;
+				reponses[2] = encryption;
+		RIL_onUnsolicitedResponse (
+	            RIL_UNSOL_PTT_OUTGOING_CALL_PROGRESS,
+	            reponses, sizeof(int)*5);
+		}
        
    }else if(strStartsWith(s,"^DSDORMANT"))
     {
