@@ -50,10 +50,11 @@ static char* NextSplit(char **p_cur,char split)
     return NULL;
 }
 //parse +CGIU: 2;0; ”12345”;1,2; 1,10,0,””; 2,0,0,”X-man”
-static int parse_cgiu(char* line){
+static int parse_cgiu(char* line,PttGroups* pgs){
   char *start,*p,*p1;
   int group_number,dyn_group_number;
   char* tun;
+  int index=0;
   int emergency_type,emergency_number;
   int gid,gpriority,gstate;
   char* gname;
@@ -73,11 +74,20 @@ static int parse_cgiu(char* line){
   at_tok_nextint(&start,&dyn_group_number);
   DBG("dyn groupnumber=%d",dyn_group_number);
 
+  if(pgs){
+  	pgs->groups_number = group_number;
+	pgs->dyn_groups_number = dyn_group_number;
+	pgs->ginfo = calloc(group_number+dyn_group_number,sizeof(PttGroupInfo));
+  }
   start = p = ++p1;
   p1 = NextSplit(&p,';');
   if(p1) *p1='\0';
   at_tok_nextstr(&start,&tun);
   DBG("tun=%s",tun);
+  if(pgs)
+  	pgs->tun = strdup(tun);
+
+  
 
   start = p = ++p1;
   p1 = NextSplit(&p,';');
@@ -98,6 +108,13 @@ static int parse_cgiu(char* line){
     at_tok_nextint(&start,&gstate);
     at_tok_nextstr(&start,&gname);
     DBG("group->gid[%d],gpriority[%d],gstate[%d],gname[%s]",gid,gpriority,gstate,gname);
+		if(pgs){
+			pgs->ginfo[index].gid = gid;
+			pgs->ginfo[index].gpriority= gpriority;
+			pgs->ginfo[index].gstate = gstate;
+			pgs->ginfo[index].gname = strdup(gname);
+			index++;
+		}
     }else {
       break;
     }
@@ -105,9 +122,16 @@ static int parse_cgiu(char* line){
     
   }while(1);
 
-  return 0;
+  return 0;  
   
-  
+}
+static void free_ptt_groups(PttGroups* pgs){
+	int index=0;
+	if(pgs->tun) free(pgs->tun);
+	for(;index<(pgs->dyn_groups_number+pgs->groups_number);index++)
+		if(pgs->ginfo[index].gname) free(pgs->ginfo[index].gname);
+	//free ginfo
+	free(pgs->ginfo);
 }
 /*
  *case
@@ -124,7 +148,7 @@ int get_ptt_group_info(void){
   }
   line = strdup(atresponse->p_intermediates->line);
  //+CGIU: 2;0; ”12345”;1,2; 1,10,0,””; 2,0,0,”X-man”
-  parse_cgiu(line);  
+  parse_cgiu(line,NULL);  
   free(line);
   
 ptt_get_failed:
@@ -431,6 +455,32 @@ static const char* ptt_getActionCause(int ac){
 }
 
 void requestPttQueryAvailableGroups(void *data, size_t datalen, RIL_Token t){
+  ATResponse *atresponse = NULL;
+  int err;
+  char* line;
+  PttGroups pgs;
+
+  err = at_send_command_singleline("AT+CGIU","+CGIU:", &atresponse);
+  if(err != 0 || atresponse->success == 0){
+	ERROR("cgiu query failed\n");
+	goto ptt_get_failed;
+  }
+  line = strdup(atresponse->p_intermediates->line);
+ //+CGIU: 2;0; ”12345”;1,2; 1,10,0,””; 2,0,0,”X-man”
+  parse_cgiu(line,&pgs);  
+  free(line);
+  
+
+  if(atresponse)
+	at_response_free(atresponse);  
+  
+  RIL_onRequestComplete(t, RIL_E_SUCCESS, &pgs,sizeof(pgs));	  
+  return;
+  
+ptt_get_failed:
+  if(atresponse)
+	at_response_free(atresponse);  
+  RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL,0);	  
 	
 }
 void requestPttGroupSetup(void *data, size_t datalen, RIL_Token t){
@@ -635,6 +685,34 @@ error:
 
 }
 void requestPttBizState(void *data, size_t datalen, RIL_Token t){
+	ATResponse *p_response = NULL;
+	int responses[3];
+	int err;
+	char *line;
+	char ret;
+
+	err = at_send_command_singleline("AT+CPTTINFO?", "^CPTTINFO:", &p_response);
+
+	if (err < 0 || p_response->success == 0) {
+		// assume radio is off
+		goto error;
+	}
+
+	line = p_response->p_intermediates->line;
+
+	err = at_tok_start(&line);
+	if (err < 0) goto error;
+
+	err = at_tok_nextint(&line, &responses[0]);
+	if (err < 0) goto error;
+
+	at_response_free(p_response);
+	//only report biz state
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, responses,sizeof(int));
+	return;
+error:
+	at_response_free(p_response);
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 	
 }
 
