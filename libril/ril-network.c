@@ -137,6 +137,27 @@ static int networktype( int sysmode)
 	
 	return map[sysmode];
 }
+
+static int ME3760_network_type_map(int act){
+	/*
+	0  GSM 制式 
+	1  GSM  增强型 
+	2  UTRAN 制式 
+	3  GSM w/EGPRS 
+	4  UTRAN w/HSDPA 
+	5  UTRAN w/HSUPA 
+	6  UTRAN w/HSDPA and HSUPA 
+	7  E-UTRAN 
+	*/
+	int type_maps[]={
+		1,2,3,1,9,10,11,11
+	};
+	if(act>7)
+		act=7;
+	if(act<0)
+		act=2;
+	return type_maps[act];
+}
 static int is_cdma1x_net( int netmode){
 	int ret = 0;
 	switch(netmode){
@@ -464,15 +485,65 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 				rssi = (rssi*32)/92;
 		}				
 		response.GW_SignalStrength.signalStrength = rssi;			
-		response.GW_SignalStrength.bitErrorRate = ber;
-	}else if(kRIL_HW_EM350==rilhw->model){
-		response.LTE_SignalStrength.signalStrength = rssi;
-	}else
-	{
-		response.GW_SignalStrength.signalStrength = rssi;
-		response.GW_SignalStrength.bitErrorRate = ber;
 	}
-	
+	#if (CDMA_MASQUERADING==0)
+	else if((kRIL_HW_MC2716 == rilhw->model)||
+		(kRIL_HW_MC8630 == rilhw->model)){
+		ATResponse *p_response2 = NULL;
+		int evdo_rssi;
+		err = at_send_command_singleline("AT^HDRCSQ", "^HDRCSQ:", &p_response2);		
+		if (err < 0 || p_response2->success == 0) {
+			goto error;
+		}
+		
+		line = p_response2->p_intermediates->line;
+		
+		err = at_tok_start(&line);
+		if (err < 0) goto error;
+		
+		err = at_tok_nextint(&line, &evdo_rssi);
+		if (err < 0) goto error;
+
+		ber=99;
+		
+		response.CDMA_SignalStrength.dbm = (31*(125-rssi))/50;
+		response.CDMA_SignalStrength.ecio=0;
+		if(evdo_rssi==0)
+			response.EVDO_SignalStrength.dbm = 99 ;
+		else if(evdo_rssi==20)		
+			response.EVDO_SignalStrength.dbm = 105;		
+		else if(evdo_rssi==40)
+			response.EVDO_SignalStrength.dbm = 90;
+		else if(evdo_rssi==60)
+			response.EVDO_SignalStrength.dbm = 75;
+		else if(evdo_rssi==80)
+			response.EVDO_SignalStrength.dbm = 60;
+		else
+			response.EVDO_SignalStrength.dbm = 60;
+		response.EVDO_SignalStrength.ecio=0;	
+		response.EVDO_SignalStrength.signalNoiseRatio = 8;
+
+		at_response_free(p_response2);
+	}
+	#endif
+	else
+	{
+		//GSM 0~31,99
+		//TD 100~199
+		//LTE 100~199
+		if(rssi>=100){
+			if(199==rssi)
+				rssi=99;
+			else {
+				rssi = rssi-100;
+				rssi >>=1;
+			}
+		}
+		response.GW_SignalStrength.signalStrength = rssi;
+	}
+	response.GW_SignalStrength.bitErrorRate = ber;
+
+   
     RIL_onRequestComplete(t, RIL_E_SUCCESS,& response, sizeof(response));
 
     at_response_free(p_response);
@@ -847,10 +918,30 @@ static void _requestCDMARegistrationState(void *data,
 		radio_tech_name[net],registered_status[registered]);
 	
     ril_status(network_state)=registered;
+	#if CDMA_MASQUERADING
     RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
     for(i=0;i<4;i++){
     	  free(responseStr[i]);
     }
+	#else
+    for(i=4;i<14;i++){
+		responseStr[i]=NULL;
+    }
+	if(cdma_context.valid){
+    	asprintf(&responseStr[4], "%d",cdma_context.bsid);
+    	asprintf(&responseStr[8], "%d",cdma_context.sid);
+    	asprintf(&responseStr[9], "%d",cdma_context.nid);
+    	asprintf(&responseStr[14], "%d",cdma_context.pn);
+	}
+	asprintf(&responseStr[10], "%d",roaming?0:1);
+	asprintf(&responseStr[12], "%d",roaming?0:1);
+    RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 14*sizeof(char*));
+    for(i=0;i<14;i++){
+		if(responseStr[i])
+			free(responseStr[i]);
+    }
+	
+	#endif
      at_response_free(p_response);
     return;
 error:
@@ -1403,6 +1494,9 @@ static int _requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t
     }
 
 
+	if(kRIL_HW_ME3760==rilhw->model)
+		response[3] = ME3760_network_type_map(response[3]);
+
 	if(response[3]>12)
 		response[3] = 3;//fallback to umts
     if(kRIL_HW_EM350 ==rilhw->model){
@@ -1716,7 +1810,8 @@ static int _requestRegistrationState(void *data, size_t datalen, RIL_Token t)
             goto error;
     }
 
-
+	if(kRIL_HW_ME3760==rilhw->model)
+		response[3] = ME3760_network_type_map(response[3]);
 	if(response[3]>12)
 		response[3] = 3;//fallback to umts
     if(kRIL_HW_EM350 ==rilhw->model){
@@ -1783,7 +1878,7 @@ void requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t)
         int err;
         ATResponse* atresponse = NULL;
         int response[4] = {0};
-        char* responseStr[4] = {NULL};
+        char* responseStr[14] = {NULL};
         
         err = at_send_command_singleline("AT^SYSINFO", "^SYSINFO:", &atresponse);
         if (err == 0 && atresponse->success && atresponse->p_intermediates->line) 
@@ -1826,11 +1921,32 @@ void requestGPRSRegistrationState(void *data, size_t datalen, RIL_Token t)
 				radio_tech_name[response[3]],registered_status[response[0]]);
 
             ril_status(data_network_state)=response[0];
-            RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
-            
-            for(i=0; i<4; i++){
-                if(responseStr[i]) free(responseStr[i]);
-            }
+
+			
+			#if CDMA_MASQUERADING
+			RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 4*sizeof(char*));
+			for(i=0;i<4;i++){
+				  free(responseStr[i]);
+			}
+			#else
+			for(i=4;i<14;i++){
+				responseStr[i]=NULL;
+			}
+			if(cdma_context.valid){
+				asprintf(&responseStr[4], "%d",cdma_context.bsid);
+				asprintf(&responseStr[8], "%d",cdma_context.sid);
+				asprintf(&responseStr[9], "%d",cdma_context.nid);				
+				asprintf(&responseStr[14], "%d",cdma_context.pn);
+			}
+			asprintf(&responseStr[10], "%d",romming?0:1);
+			asprintf(&responseStr[12], "%d",romming?0:1);
+			RIL_onRequestComplete(t, RIL_E_SUCCESS, responseStr, 14*sizeof(char*));
+			for(i=0;i<14;i++){
+				if(responseStr[i])
+					free(responseStr[i]);
+			}
+			
+			#endif
         }
     }
     else

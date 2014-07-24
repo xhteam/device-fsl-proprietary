@@ -358,3 +358,24 @@ void pttcall_call_info_indicate(int active,int inst,int callstatus,int aiservice
      currcall.isMT = isMT;
   }
 }
+
+void requestPttQueryAvailableGroups(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttGroupSetup(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttGroupRelease(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttCallDial(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttCallHangup(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttCurrentGroupScanlistUpdate(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttQueryBlockedIndicator(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttDeviceInfo(void *data, size_t datalen, RIL_Token t){	
+}
+void requestPttBizState(void *data, size_t datalen, RIL_Token t){
+	
+}
+

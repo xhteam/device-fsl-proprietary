@@ -83,6 +83,16 @@ static ST_RIL_HARDWARE hw_mapping[] =
 		.voice_rw_period= "20",
 	},
 	{
+		.model_name 	= "ME3760",
+		.model			= kRIL_HW_ME3760,
+		.prefer_net 	= kPREFER_NETWORK_TYPE_TD_SCDMA,
+		.vid			= 0x19d2,
+		.pid			= 0x0199,
+		.service_port	= "/dev/ttyUSB0",
+		.modem_port 	= "/dev/ttyUSB1",
+		.no_suspend		= 1,
+	},
+	{
 		.model_name 	= "MC8630",
 		.model			= kRIL_HW_MC8630,
 		.prefer_net 	= kPREFER_NETWORK_TYPE_CDMA_EVDV,

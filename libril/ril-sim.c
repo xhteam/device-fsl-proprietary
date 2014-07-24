@@ -1,4 +1,5 @@
 #include "ril-handler.h"
+#include "itu_network.h"
 #include <cutils/properties.h>
 
 
@@ -11,7 +12,31 @@
 
 
 static const struct timespec TIMEVAL_SIMPOLL = { 1, 0 };
+static void cdma_init(void)
+{
+	 int err;
+    
+    ATResponse *atresponse = NULL;     
+    
+    err = at_send_command_raw("AT+CIMI", &atresponse);
+    
+    if (err == 0 && atresponse->success) 
+    {
+        //eat pre space ,why ZTE forget this?
+        char* line = atresponse->p_intermediates->line;
+        char* imsi = line;
+        itu_operator op;
+        
+        while(*imsi==' ') imsi++;
 
+        err = network_query_operator(imsi, &op);
+    	property_set("ril.cdma.operator.numeric",!err?op.numeric:"46003");
+    	
+    }
+    at_response_free(atresponse);
+    
+        
+}
 /** do post- SIM ready initialization */
 void onSIMReady()
 {
@@ -63,6 +88,10 @@ void onSIMReady()
 	RIL_onUnsolicitedResponse (
 		RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
 		NULL, 0);
+	if(kRIL_HW_MC2716==rilhw->model||
+		kRIL_HW_MC8630==rilhw->model){
+			cdma_init();
+		}
 
 }
 

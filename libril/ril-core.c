@@ -217,6 +217,17 @@ static RIL_REQUEST RIL_DISP_TABLE[]=
 	RIL_REQUEST_ENTRY(RIL_REQUEST_STK_SEND_ENVELOPE_COMMAND,requestSTKSendEnvelopeCommand),
 	RIL_REQUEST_ENTRY(RIL_REQUEST_STK_SEND_TERMINAL_RESPONSE,requestSTKSendTerminalResponse),
 	*/
+	/*PTT*/	
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_QUERY_AVAILABLE_GROUPS,requestPttQueryAvailableGroups),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_GROUP_SETUP,requestPttGroupSetup),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_GROUP_RELEASE,requestPttGroupRelease),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_CALL_DIAL,requestPttCallDial),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_CALL_HANGUP,requestPttCallHangup),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_CURRENT_GROUP_SCANLIST_UPDATE,requestPttCurrentGroupScanlistUpdate),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_QUERY_BLOCKED_INDICATOR,requestPttQueryBlockedIndicator),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_DEVICE_INFO,requestPttDeviceInfo),
+	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_QUERY_BIZ_STATE,requestPttBizState),
+	
 	RIL_REQUEST_ENTRY(RIL_REQUEST_PTT_DEBUG,pttDebug),
 	RIL_REQUEST_ENTRY(RIL_REQUEST_RIL_DEBUG,requestDebug),
 	RIL_REQUEST_ENTRY(-1,requestDebug),
@@ -258,6 +269,7 @@ unsigned int   ril_persosubstate_network;
 PST_RIL_HARDWARE rilhw;		
 
 ril_context_t ril_context;
+cdma_network_context cdma_context;
 
 
 
@@ -568,12 +580,9 @@ processRequest (int request, void *data, size_t datalen, RIL_Token t)
 {
 	int err = RIL_E_REQUEST_NOT_SUPPORTED;
 
-
-   if (requestStateFilter(request, t)){
-		DBG("ril debug request filter");
+   if (requestStateFilter(request, t))
 		return;
-	}
-	
+
 	PRIL_REQUEST pRequest=RIL_DISP_TABLE;
 	while(pRequest)
 	{
@@ -854,6 +863,8 @@ int modem_init(void)
 		//Ellie: adjust the volume to the maximum
 		if(kRIL_HW_MC8630 ==rilhw->model)
 			at_send_command("AT+CLVL=4", NULL);
+		//report cdma network info
+		at_send_command("AT+ZCED=1,1", NULL);
 
 	}else if(kRIL_HW_EM350 ==rilhw->model){
 	  /*  No auto-answer */
@@ -1205,6 +1216,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	else if (strStartsWith(s, "^HCMGR:")||strStartsWith(s, "^HCMT:")) // cdma directly report
 	{
         int ret;
+		#if CDMA_MASQUERADING
         char* pdu;
         ret = encode_gsm_sms_pdu(s, sms_pdu, &pdu);
         if (ret == 0)
@@ -1214,6 +1226,16 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
                 RIL_UNSOL_RESPONSE_NEW_SMS,
                 pdu, strlen(pdu));
         }
+		#else		
+		RIL_CDMA_SMS_Message sms;
+		ret = encode_cdma_sms(s,sms_pdu,&sms);
+		if(!ret){
+            RIL_onUnsolicitedResponse (
+                RIL_UNSOL_RESPONSE_CDMA_NEW_SMS,
+                &sms, sizeof(RIL_CDMA_SMS_Message));
+			
+		}
+		#endif
 	}
 	else if (strStartsWith(s, "+CMGR:")) //read return
 	{            
@@ -1441,9 +1463,34 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         }
 		
          free(line);
-    }
-	else
-    {
+    }else if(strStartsWith(s,"+CCED:"))  {
+		int band,channel,sid,nid,bsprev,pilot_pn_offset,bsid;
+		int notused;
+        char* tmp = line = strdup(s);
+        at_tok_start(&line);
+
+        at_tok_nextint(&line, &band);
+		at_tok_nextint(&line, &channel);
+		at_tok_nextint(&line, &sid);
+		at_tok_nextint(&line, &nid);
+		at_tok_nextint(&line, &bsprev);
+		at_tok_nextint(&line, &pilot_pn_offset);
+		at_tok_nextint(&line, &bsid);
+		if(bsid!=cdma_context.bsid||
+			cdma_context.sid != sid||
+			cdma_context.nid != nid||
+			cdma_context.pn != pilot_pn_offset){
+			cdma_context.bsid = bsid;
+			cdma_context.sid = sid;
+			cdma_context.nid = nid;
+			cdma_context.pn = pilot_pn_offset;
+			cdma_context.valid=1;
+			// RIL_onUnsolicitedResponse ( //@@
+			// RIL_UNSOL_RESPONSE_NETWORK_STATE_CHANGED,
+			 //NULL, 0);		 
+		}
+		free(tmp);		
+    }else{
     	DBG("unhandled unsolicited message [%s]\n",s);
     }
 	
@@ -1581,12 +1628,23 @@ runer_loop:
 			DBG("RIL Prepare init ,ServicePort[%s],ModemPort[%s]",s_service_port,s_modem_port);	
 			
 			pdp_init();
-
-			radio_state_not_ready = RADIO_STATE_SIM_NOT_READY;
-			radio_state_ready = RADIO_STATE_SIM_READY;
-			radio_state_locked_or_absent = RADIO_STATE_SIM_LOCKED_OR_ABSENT;
-			ril_apptype = RIL_APPTYPE_SIM;
-			ril_persosubstate_network = RIL_PERSOSUBSTATE_SIM_NETWORK;		
+			#if (CDMA_MASQUERADING==0)
+			if(rilhw->prefer_net == kPREFER_NETWORK_TYPE_CDMA_EVDV){
+				radio_state_not_ready = RADIO_STATE_RUIM_NOT_READY;
+				radio_state_ready = RADIO_STATE_RUIM_READY;
+				radio_state_locked_or_absent = RADIO_STATE_RUIM_LOCKED_OR_ABSENT;
+				ril_apptype = RIL_APPTYPE_RUIM;
+				ril_persosubstate_network = RIL_PERSOSUBSTATE_RUIM_NETWORK1;
+			}
+			else 
+			#endif
+			{
+				radio_state_not_ready = RADIO_STATE_SIM_NOT_READY;
+				radio_state_ready = RADIO_STATE_SIM_READY;
+				radio_state_locked_or_absent = RADIO_STATE_SIM_LOCKED_OR_ABSENT;
+				ril_apptype = RIL_APPTYPE_SIM;
+				ril_persosubstate_network = RIL_PERSOSUBSTATE_SIM_NETWORK;		
+			}
         	while (fd < 0) {
 //            if (queueArgs->port > 0) {
   //              if (queueArgs->loophost)

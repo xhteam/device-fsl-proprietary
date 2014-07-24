@@ -36,7 +36,16 @@ typedef struct ril_context
 	ril_status_t status;
 }ril_context_t;
 
+typedef struct cdma_network_context{
+	int valid;
+	int bsid;
+	int sid;
+	int nid;
+	int pn;
+}cdma_network_context;
+
 extern ril_context_t ril_context;
+extern cdma_network_context cdma_context;
 
 //fast access method
 #define ril_status(x) ril_context.status.x

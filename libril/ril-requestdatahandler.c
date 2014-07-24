@@ -76,7 +76,7 @@ static void dummyResponse(void);
 #define responseDataCallList dummyResponse
 #define responseGsmBrSmsCnf dummyResponse
 #define responseCdmaBrSmsCnf dummyResponse
-
+#define responseGroupList dummyResponse
 #define dispatchDataCall dispatchStrings
 #define responseSetupDataCall responseStrings
 

@@ -105,7 +105,10 @@ void requestDeviceIdentity(void *data, size_t datalen, RIL_Token t)
 		if (err < 0 || atresponse->success == 0) {
 			goto error;
 		} else {
-			asprintf(&response[2], "%s", atresponse->p_intermediates->line);
+			char* line = atresponse->p_intermediates->line;
+			char* esn=line;
+			if(*esn=='0'&&(((*(esn+1))=='x')||((*(esn+1))=='X'))) esn+=2;
+			asprintf(&response[2], "%s",esn);
 			at_response_free(atresponse);
 			atresponse = NULL;
 		}
@@ -119,8 +122,11 @@ void requestDeviceIdentity(void *data, size_t datalen, RIL_Token t)
 			 atresponse = NULL;
 			 //goto error;
 		 } else {
-			 asprintf(&response[0], "%s", atresponse->p_intermediates->line);
-			 asprintf(&response[3], "%s", atresponse->p_intermediates->line);
+			 char* line = atresponse->p_intermediates->line;
+			 char* meid=line;
+			 if(*meid=='0'&&(((*(meid+1))=='x')||((*(meid+1))=='X'))) meid+=2;			 
+			 asprintf(&response[0], "%s",meid);
+			 asprintf(&response[3], "%s",meid);
 			 at_response_free(atresponse);
 			 atresponse = NULL;
 		 }

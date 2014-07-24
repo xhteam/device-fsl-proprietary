@@ -465,7 +465,6 @@ void requestCDMASendSMS(void *data, size_t datalen, RIL_Token t)
 	char* command;
 	int i;
 
-    cdma_sms = (RIL_CDMA_SMS_Message *)data;
 	
 	//dump_cdma_sms_msg(cdma_sms);
 	/*
@@ -507,20 +506,26 @@ void requestCDMASendSMS(void *data, size_t datalen, RIL_Token t)
     const char* smsc;
     const char* pdu;
     char* msg = NULL;
-    
+    #if CDMA_MASQUERADING
     smsc = ((const char **)data)[0];
     pdu = ((const char **)data)[1];
-//    ril_dump_array("pdu", pdu, strlen(pdu));
-    
-    DBG("requestCDMASendSMS, decoding message...\n");
+//	  ril_dump_array("pdu", pdu, strlen(pdu));
+	
+	DBG("requestCDMASendSMS, decoding message...\n");
 	msg = decode_gsm_sms_pdu(pdu, &addr, &addr_len, &fmt, &message_length);
 
-    if (!msg)
-    {
-        ERROR("requestCDMASendSMS, Decode gsm msg failed\n");
+	if (!msg)
+	{
+		ERROR("requestCDMASendSMS, Decode gsm msg failed\n");
 
-        goto error;
-    }
+		goto error;
+	}
+	#else	
+    cdma_sms = (RIL_CDMA_SMS_Message *)data;
+	addr = decode_cdma_sms_address(cdma_sms);
+	addr_len = cdma_sms->sAddress.number_of_digits;
+	msg = decode_cdma_sms_message(cdma_sms,&fmt,&message_length);
+	#endif
 
     ERROR("requestCDMASendSMS\n");
     ERROR("addr_len: %d\n", addr_len);
@@ -556,7 +561,7 @@ void requestCDMASendSMS(void *data, size_t datalen, RIL_Token t)
     err = at_tok_nextint(&line, &response.messageRef);
     if (err < 0)
         goto error;
-	response.errorCode = -1;
+//	response.errorCode = -1;
     RIL_onRequestComplete(t, RIL_E_SUCCESS, &response, sizeof(response));
     at_response_free(atresponse);
 

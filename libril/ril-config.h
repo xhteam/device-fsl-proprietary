@@ -5,7 +5,7 @@
 
 //-------------system---------
 
-#define RIL_IMEISV_VERSION  0
+#define RIL_IMEISV_VERSION  1
 #define RIL_DRIVER_VERSION "QRIL 1.1"
 #define MAX_AT_RESPONSE (8 * 1024)
 #define START_PPPD_TIMEOUT 	60 /*10*2=20s*/
@@ -18,7 +18,7 @@
 #define SYS_NET_PATH   "/sys/class/net"
 #define PPP_INTERFACE  "ppp0"
 
-#define CDMA_MASQUERADING 1
+#define CDMA_MASQUERADING 0
 
 #define MAX_DATA_CALL_COUNT 16
 
