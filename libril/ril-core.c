@@ -1320,7 +1320,15 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         if (err != 0) {
             ERROR("invalid ^RSSI  line %s\n",s);
         } else {
-		response.LTE_SignalStrength.signalStrength = rssi;
+ 	  response.GW_SignalStrength.signalStrength = rssi;
+	  response.LTE_SignalStrength.signalStrength = rssi;
+	  if(99==rssi)
+	  	response.LTE_SignalStrength.rsrp=0x7FFFFFFF;
+	  else
+		response.LTE_SignalStrength.rsrp=113-2*rssi;
+	  response.LTE_SignalStrength.rsrq=0x7FFFFFFF;
+	  response.LTE_SignalStrength.rssnr=0x7FFFFFFF;
+	  response.LTE_SignalStrength.cqi=0x7FFFFFFF;	
            	 RIL_onUnsolicitedResponse (
                 	RIL_UNSOL_SIGNAL_STRENGTH,
                		& response, sizeof(response));

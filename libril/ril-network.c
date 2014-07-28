@@ -526,8 +526,17 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 		at_response_free(p_response2);
 	}
 	#endif
-	else
-	{
+	else if(kRIL_HW_EM350 == rilhw->model){
+	  response.GW_SignalStrength.signalStrength = rssi;
+	  response.LTE_SignalStrength.signalStrength = rssi;
+	  if(99==rssi)
+	  	response.LTE_SignalStrength.rsrp=0x7FFFFFFF;
+	  else
+		response.LTE_SignalStrength.rsrp=113-2*rssi;
+	  response.LTE_SignalStrength.rsrq=0x7FFFFFFF;
+	  response.LTE_SignalStrength.rssnr=0x7FFFFFFF;
+	  response.LTE_SignalStrength.cqi=0x7FFFFFFF;	
+	}else{
 		//GSM 0~31,99
 		//TD 100~199
 		//LTE 100~199
