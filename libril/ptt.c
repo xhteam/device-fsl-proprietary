@@ -598,14 +598,17 @@ void requestPttCurrentGroupScanlistUpdate(void *data, size_t datalen, RIL_Token 
 	char cmd[256];
 	int err;
 	char ret;
-
-	len=sprintf(cmd,"AT+CGSU=%d,\"",((int*)data)[0]);
-	datalen--;
-	i=1;
-	while(datalen-->0){
+	int groupnumber=datalen/4-1;
+	if(groupnumber>0){
+	    len=sprintf(cmd,"AT+CGSU=%d,\"",((int*)data)[0]);	
+	    i=1;
+	    while(groupnumber-->0){
 		len+=sprintf(cmd+len,"%d ",((int*)data)[i++]);
+	    }
+	    len+=sprintf(cmd+len,"\"");
+	}else {
+	    sprintf(cmd,"AT+CGSU=%d",((int*)data)[0]);
 	}
-	len+=sprintf(cmd+len,"\"");
 	
 	err = at_send_command(cmd,&p_response);
 
