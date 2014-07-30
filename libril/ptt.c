@@ -785,7 +785,7 @@ void requestPttBizState(void *data, size_t datalen, RIL_Token t){
 	char *line;
 	char ret;
         memset(&pi,0,sizeof(PttInfo));
-	err = at_send_command_singleline("AT+CPTTINFO?", "^CPTTINFO:", &p_response);
+	err = at_send_command_singleline("AT^CPTTINFO?", "^CPTTINFO:", &p_response);
 
 	if (err < 0 || p_response->success == 0) {
 		// assume radio is off
