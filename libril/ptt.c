@@ -693,7 +693,8 @@ error:
 //^CPTTINFO:3;6001,15,0,1,"123456","X-man",0
 //^CPTTINFO:7;;5,"3002"
 //^CPTTINFO:2;8003
-static int parse_pttinfo(char* line,PttInfo* pi){
+
+int parse_pttinfo(char* line,PttInfo* pi){
   char *start,*p,*p1;
   int givalid,civalid;
   char* mystring;
@@ -775,7 +776,8 @@ static int parse_pttinfo(char* line,PttInfo* pi){
   return 0;  
   
 }
-static void release_pttinfo(PttInfo* pi){
+
+void release_pttinfo(PttInfo* pi){
   if(pi->gspeakernum) free(pi->gspeakernum);
   if(pi->gspeakername) free(pi->gspeakername);
   if(pi->ccalleeid) free(pi->ccalleeid);

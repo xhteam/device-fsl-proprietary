@@ -1675,7 +1675,63 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 			 //NULL, 0);		 
 		}
 		free(tmp);		
-    }else{
+    }else if(strStartsWith(s,"^CPTTINFO:")){
+			PttInfo pi;
+			char* tmp=line=strdup(s);
+		  parse_pttinfo(line,&pi);
+			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_BIZ_INFO,
+					            &pi, sizeof(PttInfo));
+			release_pttinfo(&pi);
+			free(tmp);
+		}else if(strStartsWith(s,"^JOININD:")){
+			int responses[2];
+			char* tmp = line = strdup(s);
+			at_tok_start(&line);
+			at_tok_nextint(&line, &responses[0]);
+			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_NOTIFICATION_JOIN_GROUP,
+						responses, sizeof(int));
+			free(tmp);
+		}else if(strStartsWith(s,"^TKMODE:")){
+			int responses[2];
+      char* tmp = line = strdup(s);
+		  at_tok_start(&line);
+
+			at_tok_nextint(&line, &responses[0]);
+			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_TRUNKING_MODE,
+			    responses, sizeof(int));
+			free(tmp);
+		}else if(strStartsWith(s,"+CGONR:")){
+     int responses[2];
+		 char* tmp = line = strdup(s);
+		 at_tok_start(&line);
+
+		 at_tok_nextint(&line, &responses[0]);
+		 at_tok_nextint(&line, &responses[1]);
+		 RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_GROUP_OWNER,
+		  responses, sizeof(int)*2);
+			free(tmp);
+		}else if(strStartsWith(s,"+CDINFO:")){
+			int responses[3];
+			char* tmp = line = strdup(s);
+		  at_tok_start(&line);
+
+			at_tok_nextint(&line, &responses[0]);
+			at_tok_nextint(&line, &responses[1]);
+			at_tok_nextint(&line, &responses[2]);
+			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_DEVICE_INFO,
+					      responses, sizeof(int)*3);
+			free(tmp);
+		}else if(strStartsWith(s,"^NWVER:"))  {
+				int nwver;
+				char* tmp = line = strdup(s);
+				at_tok_start(&line);
+												
+				at_tok_nextint(&line, &nwver);
+				RIL_onUnsolicitedResponse (
+				RIL_UNSOL_PTT_NETWORK_VERSION,
+				&nwver, sizeof(int));
+				free(tmp);
+		}else{
     	DBG("unhandled unsolicited message [%s]\n",s);
     }
 	
@@ -1691,6 +1747,7 @@ static void signalCloseQueues(char close_flag)
         if ((err = pthread_mutex_lock(&q->queueMutex)) != 0)
             ERROR("%s() failed to take queue mutex: %s",
                 __func__, strerror(err));
+
 
         q->closed = close_flag;
         if ((err = pthread_cond_signal(&q->cond)) != 0)
