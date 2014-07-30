@@ -685,13 +685,106 @@ error:
 	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
 
 }
+
+//parse following lines
+//^CPTTINFO:3;6001,15,0,1,"123456","X-man",0
+//^CPTTINFO:7;;5,"3002"
+//^CPTTINFO:2;8003
+static int parse_pttinfo(char* line,PttInfo* pi){
+  char *start,*p,*p1;
+  int givalid,civalid;
+  char* mystring;
+  char* myline = strdup(line);
+  givalid=civalid=0;
+  
+  DBG("parsing line:\n%s\n",myline);
+  start = myline;
+  at_tok_start(&start);//skip prefix XXX:   
+  p = start;  
+  p1 = NextSplit(&p,';');
+  
+  if(p1) {   
+    *p1='\0'; 
+  
+  at_tok_nextint(&start,&pi->pttstate);
+  //DBG("pttstate=%d\n",pi->pttstate); 
+  
+  //get group info
+  start = p = ++p1;  
+  p1 = NextSplit(&p,';');
+  if(p1) {
+	*p1='\0';
+  }
+  
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->gid);
+    givalid|=PTT_BIZSTATE_GID_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->gpriority);
+    givalid|=PTT_BIZSTATE_GPRIORITY_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->gdemandindicator);
+    givalid|=PTT_BIZSTATE_GDEMANDIND_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->ggrantstatus);
+    givalid|=PTT_BIZSTATE_GGRANTSTATUS_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextstr(&start,&mystring);
+    pi->gspeakernum = strdup(mystring);
+    givalid|=PTT_BIZSTATE_GSPKNUM_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextstr(&start,&mystring);
+    pi->gspeakername = strdup(mystring);
+    givalid|=PTT_BIZSTATE_GSPKNAME_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->gownerindicator);
+    givalid|=PTT_BIZSTATE_GOWNERIND_VALID;
+  }
+  }
+  pi->givalid=givalid;
+  
+  //get personal call info
+  if(p1){
+  start = p = ++p1;
+  if(at_tok_hasmore(&start)){
+    at_tok_nextint(&start,&pi->cpriority);
+    civalid|=PTT_BIZSTATE_CIPRIORITY_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextstr(&start,&mystring);
+    pi->ccalleeid = strdup(mystring);
+    civalid|=PTT_BIZSTATE_CICALLEEID_VALID;
+  }
+  if(at_tok_hasmore(&start)){
+    at_tok_nextstr(&start,&mystring);
+    pi->ccallerid = strdup(mystring);
+    civalid|=PTT_BIZSTATE_CICALLERID_VALID;
+  }
+  }
+  pi->civalid=civalid;
+  free(myline);
+  return 0;  
+  
+}
+static void release_pttinfo(PttInfo* pi){
+  if(pi->gspeakernum) free(pi->gspeakernum);
+  if(pi->gspeakername) free(pi->gspeakername);
+  if(pi->ccalleeid) free(pi->ccalleeid);
+  if(pi->ccallerid) free(pi->ccallerid);
+}
 void requestPttBizState(void *data, size_t datalen, RIL_Token t){
 	ATResponse *p_response = NULL;
-	int responses[3];
+	PttInfo pi;
 	int err;
 	char *line;
 	char ret;
-
+        memset(&pi,0,sizeof(PttInfo));
 	err = at_send_command_singleline("AT+CPTTINFO?", "^CPTTINFO:", &p_response);
 
 	if (err < 0 || p_response->success == 0) {
@@ -700,20 +793,16 @@ void requestPttBizState(void *data, size_t datalen, RIL_Token t){
 	}
 
 	line = p_response->p_intermediates->line;
-
-	err = at_tok_start(&line);
-	if (err < 0) goto error;
-
-	err = at_tok_nextint(&line, &responses[0]);
-	if (err < 0) goto error;
+	parse_pttinfo(line,&pi); 
+        
 
 	at_response_free(p_response);
 	//only report biz state
-	RIL_onRequestComplete(t, RIL_E_SUCCESS, responses,sizeof(int));
+	RIL_onRequestComplete(t, RIL_E_SUCCESS, &pi,sizeof(PttInfo));
+ 	release_pttinfo(&pi);
 	return;
 error:
 	at_response_free(p_response);
-	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-	
+	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);	
 }
 

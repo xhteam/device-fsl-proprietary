@@ -527,7 +527,14 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 	}
 	#endif
 	else if(kRIL_HW_EM350 == rilhw->model){
-	  response.GW_SignalStrength.signalStrength = rssi;
+          ATResponse *atresponse = NULL;
+          char *tok = NULL;
+          int cellid,freq,rsrp,rsrq,rssnr;
+          int unused;
+          err = at_send_command_singleline("AT^CSGQRY?","^CSGQRY:",
+                                     &atresponse);
+          if (err < 0 || atresponse->success == 0){
+               response.GW_SignalStrength.signalStrength = rssi;
 	  response.LTE_SignalStrength.signalStrength = rssi;
 	  if(99==rssi)
 	  	response.LTE_SignalStrength.rsrp=0x7FFFFFFF;
@@ -536,6 +543,29 @@ void requestSignalStrength(void *data, size_t datalen, RIL_Token t)
 	  response.LTE_SignalStrength.rsrq=0x7FFFFFFF;
 	  response.LTE_SignalStrength.rssnr=0x7FFFFFFF;
 	  response.LTE_SignalStrength.cqi=0x7FFFFFFF;	
+          }else {
+    
+           tok = atresponse->p_intermediates->line;
+
+    at_tok_start(&tok);
+    at_tok_nextint(&tok, &cellid);
+    at_tok_nextint(&tok, &freq);
+    at_tok_nextint(&tok, &rsrp);
+    at_tok_nextint(&tok, &rsrq);
+    at_tok_nextint(&tok, &unused);
+    at_tok_nextint(&tok, &unused);
+    at_tok_nextint(&tok, &rssnr);
+    if(rsrp<0) rsrp=-rsrp;rsrp/=8;    
+    if(rsrq<0) rsrq=-rsrq;rsrq/=8;
+    if(rssnr<0) rssnr=-rssnr;rssnr/=8;
+    response.LTE_SignalStrength.signalStrength=rssi;
+    response.LTE_SignalStrength.rsrp=rsrp;
+    response.LTE_SignalStrength.rsrq=rsrq;
+    response.LTE_SignalStrength.rssnr=rssnr;
+    response.LTE_SignalStrength.cqi=0x7FFFFFFF;
+}
+      at_response_free(atresponse);
+	
 	}else{
 		//GSM 0~31,99
 		//TD 100~199

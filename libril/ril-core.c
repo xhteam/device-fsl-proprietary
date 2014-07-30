@@ -750,6 +750,58 @@ exit:
     return;
 }
 
+static void onRssiChanged(void *param){
+  int rssi = (int)param;
+  RIL_SignalStrength response;  
+  ATResponse *atresponse = NULL;
+  char *tok = NULL;
+  int cellid,freq,rsrp,rsrq,rssnr;
+  int unused;
+  int err = -1;
+
+    memset(&response,99,sizeof(RIL_SignalStrength));
+
+    err = at_send_command_singleline("AT^CSGQRY?","^CSGQRY:",
+                                     &atresponse);
+    if (err < 0 || atresponse->success == 0)
+        goto error;
+    
+    tok = atresponse->p_intermediates->line;
+
+    err = at_tok_start(&tok);
+    if (err < 0)
+        goto error;
+
+    at_tok_nextint(&tok, &cellid);
+    at_tok_nextint(&tok, &freq);
+    at_tok_nextint(&tok, &rsrp);
+    at_tok_nextint(&tok, &rsrq);
+    at_tok_nextint(&tok, &unused);
+    at_tok_nextint(&tok, &unused);
+    at_tok_nextint(&tok, &rssnr);
+    if(rsrp<0) rsrp=-rsrp;rsrp/=8;    
+    if(rsrq<0) rsrq=-rsrq;rsrq/=8;
+    if(rssnr<0) rssnr=-rssnr;rssnr/=8;
+    response.LTE_SignalStrength.signalStrength=rssi;
+    response.LTE_SignalStrength.rsrp=rsrp;
+    response.LTE_SignalStrength.rsrq=rsrq;
+    response.LTE_SignalStrength.rssnr=rssnr;
+    response.LTE_SignalStrength.cqi=0x7FFFFFFF;
+    goto report_signal;
+error:
+    if(99==rssi)
+	response.LTE_SignalStrength.rsrp=0x7FFFFFFF;
+    else
+	response.LTE_SignalStrength.rsrp=113-2*rssi;
+	response.LTE_SignalStrength.rsrq=0x7FFFFFFF;
+	response.LTE_SignalStrength.rssnr=0x7FFFFFFF;
+	response.LTE_SignalStrength.cqi=0x7FFFFFFF;	
+report_signal:
+     at_response_free(atresponse);
+     RIL_onUnsolicitedResponse (
+                	RIL_UNSOL_SIGNAL_STRENGTH,
+               		& response, sizeof(response));
+}
 
 #if 0
 static int SIMReady(int wait_s)
@@ -889,6 +941,7 @@ int modem_init(void)
 	    at_response_free(p_response);
 	    at_send_command_singleline("AT+CTBI?","+CTBI:", &p_response);
 	    at_response_free(p_response);
+	    at_send_command("AT^CTLVL=5", NULL);
 	}
 	else //GSM
 	{
@@ -1310,9 +1363,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
     }
     */
     else if(strStartsWith(s,"^RSSI:")){	
-	int rssi=0;
-        RIL_SignalStrength response;
-	memset(&response,99,sizeof(RIL_SignalStrength));
+	int rssi=0;        
         char* tmp =line = strdup(s);
         at_tok_start(&line);
         err = at_tok_nextint(&line, &rssi);
@@ -1320,19 +1371,9 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
         if (err != 0) {
             ERROR("invalid ^RSSI  line %s\n",s);
         } else {
- 	  response.GW_SignalStrength.signalStrength = rssi;
-	  response.LTE_SignalStrength.signalStrength = rssi;
-	  if(99==rssi)
-	  	response.LTE_SignalStrength.rsrp=0x7FFFFFFF;
-	  else
-		response.LTE_SignalStrength.rsrp=113-2*rssi;
-	  response.LTE_SignalStrength.rsrq=0x7FFFFFFF;
-	  response.LTE_SignalStrength.rssnr=0x7FFFFFFF;
-	  response.LTE_SignalStrength.cqi=0x7FFFFFFF;	
-           	 RIL_onUnsolicitedResponse (
-                	RIL_UNSOL_SIGNAL_STRENGTH,
-               		& response, sizeof(response));
+	  enqueueRILEvent(onRssiChanged, (void*)rssi, NULL); 	  
        	 }
+	
         free(tmp);
    }else if(strStartsWith(s,"+CGAL:")){
 	   	int groups[320];
@@ -1431,11 +1472,12 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 	DBG("PTTCall incoming call:inst:%d callstatus:%d,ai:%d,simplex:%d,callid:%d,demandind:%d,priority:%d,amblsn:%d,tempgrp:%d",
 		inst,callstatus,aiservice,simplex,callpartyid,demandind,priority,
 		pttambientlsn,ptttempgrp);
-       pttcall_call_info_indicate(ePttCallActive,inst,ePttCallStatusIncoming,aiservice,callpartyid,1);
-       RIL_onUnsolicitedResponse (
-            RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
-            NULL, 0);
-	   {
+       if((aiservice==eAirInterfaceServiceVoiceP2PCall)||(aiservice==eAirInterfaceServiceVideoP2PCall)){
+       	pttcall_call_info_indicate(ePttCallActive,inst,ePttCallStatusIncoming,aiservice,callpartyid,1);
+       	RIL_onUnsolicitedResponse (
+            	RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
+            	NULL, 0);
+	}else {
 	   	
 			int reponses[9];
 			reponses[0] = inst;
