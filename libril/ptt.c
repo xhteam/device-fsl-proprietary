@@ -104,7 +104,10 @@ int parse_cgiu(char* line,PttGroups* pgs){
   at_tok_nextint(&start,&emergency_type);
   at_tok_nextint(&start,&emergency_number);
   DBG("emergency_type=%d,emergency_number=%d",emergency_type,emergency_number);
-
+  if(pgs){
+     pgs->emerginfo.type = emergency_type;
+     pgs->emerginfo.number = emergency_number;
+  }
   do {
     start = p = ++p1;
     if(at_tok_hasmore(&start)){
