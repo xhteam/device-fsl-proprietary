@@ -99,8 +99,7 @@ int parse_cgiu(char* line,PttGroups* pgs){
 
   start = p = ++p1;
   p1 = NextSplit(&p,';');
-  if(p1) *p1='\0';
-  at_tok_start(&start);
+  if(p1) *p1='\0';  
   at_tok_nextint(&start,&emergency_type);
   at_tok_nextint(&start,&emergency_number);
   DBG("emergency_type=%d,emergency_number=%d",emergency_type,emergency_number);
