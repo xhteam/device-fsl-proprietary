@@ -82,7 +82,11 @@ static void pttDebug(void *data, size_t datalen, RIL_Token t)
       hangup_ptt_group_p2p_call();
     }else if(7==action){
       hook_ptt_group_p2p_call();
-    }
+    }else if(8==action){
+      ptt_log_start();
+	}else if(9==action){
+      ptt_log_stop();
+	}
 
     free(line);
     RIL_onRequestComplete(t, RIL_E_SUCCESS, NULL, 0);
@@ -1683,7 +1687,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 					            &pi, sizeof(PttInfo));
 			release_pttinfo(&pi);
 			free(tmp);
-		}else if(strStartsWith(s,"^JOININD:")){
+	}else if(strStartsWith(s,"^JOININD:")){
 			int responses[2];
 			char* tmp = line = strdup(s);
 			at_tok_start(&line);
@@ -1691,7 +1695,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_NOTIFICATION_JOIN_GROUP,
 						responses, sizeof(int));
 			free(tmp);
-		}else if(strStartsWith(s,"^TKMODE:")){
+	}else if(strStartsWith(s,"^TKMODE:")){
 			int responses[2];
       char* tmp = line = strdup(s);
 		  at_tok_start(&line);
@@ -1700,7 +1704,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_TRUNKING_MODE,
 			    responses, sizeof(int));
 			free(tmp);
-		}else if(strStartsWith(s,"+CGONR:")){
+	}else if(strStartsWith(s,"+CGONR:")){
      int responses[2];
 		 char* tmp = line = strdup(s);
 		 at_tok_start(&line);
@@ -1710,7 +1714,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 		 RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_GROUP_OWNER,
 		  responses, sizeof(int)*2);
 			free(tmp);
-		}else if(strStartsWith(s,"+CDINFO:")){
+	}else if(strStartsWith(s,"+CDINFO:")){
 			int responses[3];
 			char* tmp = line = strdup(s);
 		  at_tok_start(&line);
@@ -1721,7 +1725,7 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 			RIL_onUnsolicitedResponse (RIL_UNSOL_PTT_DEVICE_INFO,
 					      responses, sizeof(int)*3);
 			free(tmp);
-		}else if(strStartsWith(s,"^NWVER:"))  {
+	}else if(strStartsWith(s,"^NWVER:"))  {
 				int nwver;
 				char* tmp = line = strdup(s);
 				at_tok_start(&line);
@@ -1731,7 +1735,9 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
 				RIL_UNSOL_PTT_NETWORK_VERSION,
 				&nwver, sizeof(int));
 				free(tmp);
-		}else{
+	}else if(strStartsWith(s,"^GLD:"))  {
+		ptt_log_stop();
+	}else{
     	DBG("unhandled unsolicited message [%s]\n",s);
     }
 	

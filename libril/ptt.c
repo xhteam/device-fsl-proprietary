@@ -1,4 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/select.h>
 #include <telephony/ril.h>
 #include <telephony/ril_ptt.h>
 #include <netinet/in.h>
@@ -811,3 +819,139 @@ error:
 	RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);	
 }
 
+//ptt log management
+#define EVENT_TIMEOUT  ETIMEDOUT
+enum {
+ eventLogStart=1,
+ eventLogStop,
+ eventLogTrigger,
+};
+static EventSet ptt_es;
+static pthread_t thread;
+static int pttlog_init=0;
+
+static int safe_read(int fd, char *buf, int count)
+{
+    int n;
+    int i = 0;
+
+    while (i < count) {
+        n = read(fd, buf + i, count - i);
+        if (n > 0)
+            i += n;
+        else if (!(n < 0 && errno == EINTR))
+            return -1;
+    }
+
+    return count;
+}
+
+static int pipelog2file(int in,int out) 
+{
+  static unsigned char buf[4096];
+  int rlt = safe_read( in, buf, sizeof(buf) );
+		
+  if( rlt > 0 ){
+    write(out,buf,rlt);	
+  }
+	
+  return rlt;
+}
+static void* ptt_log_reader(void *arg){
+  int stop=0;
+  int trigger=0;
+  int event;
+  int fdIn,fdOut;
+  int timeout_ms=10;
+  char inPort[PROPERTY_VALUE_MAX];
+  char OutPort[PROPERTY_VALUE_MAX]; 
+  pthread_detach(pthread_self());	
+  fdIn=fdOut=-1;
+  property_get("persist.ril.login", inPort, "/dev/ttyUSB1");
+  property_get("persist.ril.logout", OutPort, "/data/ppp/ptt.log");
+  while(!stop){
+    event = eventset_wait_timeout(ptt_es,timeout_ms);
+    switch(event){
+      case eventLogStart:{
+	  DBG("PTT log start,inPort[%s]OutPort[%s]\n",inPort,OutPort);
+	  fdIn = open(inPort, O_RDONLY );
+	  fdOut = open(OutPort, O_RDWR | O_CREAT, 0666);
+	  if(fdIn<0){
+	  	ERROR("failed to open inPort\n");
+	  }
+	  if(fdOut<0){
+	  	ERROR("failed to open OutPort\n");
+	  }
+	}
+	break;
+      case eventLogStop: {
+	  close(fdOut);
+          close(fdIn);
+  	  stop++;
+	}break;	
+      case eventLogTrigger: trigger++; break;
+      default:case EVENT_TIMEOUT: {
+	if(trigger){
+	  pipelog2file(fdIn,fdOut);
+        }	
+	}break;
+    }
+  }
+  return NULL;
+}
+
+int ptt_log_start(void){
+  ATResponse *p_response = NULL;
+  int err=0;
+  char* line;
+  char* validtoken=NULL;
+  if(!pttlog_init){
+    pttlog_init++;
+    eventset_create(&ptt_es);
+    pthread_create(&thread, NULL,ptt_log_reader,NULL);
+  }
+  eventset_set(ptt_es,eventLogStart);
+  //
+
+  err = at_send_command_singleline("AT^GLD=255", "^GLD:", &p_response);
+
+  if (err < 0 || p_response->success == 0) {
+	// assume radio is off
+	goto error;
+  }
+  line = p_response->p_intermediates->line;
+  err = at_tok_start(&line);
+  if (err < 0) goto error;
+  at_tok_nextstr(&line,&validtoken);
+  if(!strcmp(validtoken,"DATA")){
+    DBG("Found PTT DATA LOG\n");
+    ptt_log_trigger(); 
+  }else{
+    DBG("PTT DATA LOG Not Found\n");
+    ptt_log_stop();
+  }
+  at_response_free(p_response);
+  return 0;
+error:
+  at_response_free(p_response);
+  ptt_log_stop();
+  return err;
+}
+int ptt_log_stop(void){
+  eventset_set(ptt_es,eventLogStop);
+  sleep(1);
+  if(pttlog_init){
+    pttlog_init--;
+    eventset_destroy(ptt_es);
+  }
+  return 0;
+}
+int ptt_log_trigger(void){
+  if(!pttlog_init){
+    pttlog_init++;
+    eventset_create(&ptt_es);
+    pthread_create(&thread, NULL,ptt_log_reader,NULL);
+  }  
+  eventset_set(ptt_es,eventLogTrigger);
+  return 0;
+}

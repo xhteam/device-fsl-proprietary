@@ -181,5 +181,13 @@ void requestGetCurrentCallsPTT(void *data, size_t datalen, RIL_Token t);
 void pttcall_call_info_indicate(int active,int inst,int callstatus,int aiservice,int pid,int isMT);
 int parse_pttinfo(char* line,PttInfo* pi);
 void release_pttinfo(PttInfo* pi);
+
+
+//modem log management
+int ptt_log_start(void);
+int ptt_log_trigger(void);
+int ptt_log_stop(void);
+
+
 #endif 
 
