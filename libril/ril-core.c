@@ -1481,7 +1481,8 @@ static void onUnsolicited (const char *s, const char *sms_pdu)
        	RIL_onUnsolicitedResponse (
             	RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED,
             	NULL, 0);
-	}else {
+	}
+	{
 	   	
 			int reponses[9];
 			reponses[0] = inst;
